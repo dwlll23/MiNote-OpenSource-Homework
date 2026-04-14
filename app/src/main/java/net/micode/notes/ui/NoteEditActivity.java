@@ -48,6 +48,7 @@ import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -385,6 +386,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             mFontSizeId = ResourceParser.BG_DEFAULT_FONT_SIZE;
         }
         mEditTextList = (LinearLayout) findViewById(R.id.note_edit_list);
+
+        findViewById(R.id.btn_checklist).setOnClickListener(this);
+        findViewById(R.id.btn_reminder).setOnClickListener(this);
     }
 
     @Override
@@ -439,6 +443,11 @@ public class NoteEditActivity extends Activity implements OnClickListener,
                         TextAppearanceResources.getTexAppearanceResource(mFontSizeId));
             }
             mFontSizeSelector.setVisibility(View.GONE);
+        } else if (id == R.id.btn_checklist) {
+            mWorkingNote.setCheckListMode(
+                    mWorkingNote.getCheckListMode() == 0 ? TextNote.MODE_CHECK_LIST : 0);
+        } else if (id == R.id.btn_reminder) {
+            setReminder();
         }
     }
 
