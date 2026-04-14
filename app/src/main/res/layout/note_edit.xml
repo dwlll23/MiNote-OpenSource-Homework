@@ -57,9 +57,28 @@
                 android:textAppearance="@style/TextAppearanceSecondaryItem" />
 
             <ImageButton
+                android:id="@+id/btn_checklist"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
+                android:background="@drawable/bg_btn_set_color"
+                android:src="@android:drawable/ic_menu_agenda" />
+
+            <ImageButton
+                android:id="@+id/btn_reminder"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginLeft="5dip"
+                android:background="@drawable/bg_btn_set_color"
+                android:src="@android:drawable/ic_menu_today" />
+
+            <ImageButton
+                android:id="@+id/btn_set_bg_color"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginLeft="5dip"
                 android:background="@drawable/bg_btn_set_color" />
         </LinearLayout>
 
@@ -117,11 +136,12 @@
     </LinearLayout>
 
     <ImageView
-        android:id="@+id/btn_set_bg_color"
+        android:id="@+id/btn_set_bg_color_legacy"
         android:layout_height="43dip"
         android:layout_width="wrap_content"
         android:background="@drawable/bg_color_btn_mask"
-        android:layout_gravity="top|right" />
+        android:layout_gravity="top|right"
+        android:visibility="gone" />
 
     <LinearLayout
         android:id="@+id/note_bg_color_selector"
