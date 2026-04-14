@@ -48,6 +48,16 @@
             android:fadingEdge="@null" />
     </LinearLayout>
 
+    <ImageButton
+        android:id="@+id/btn_search"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|right"
+        android:layout_marginTop="5dip"
+        android:layout_marginRight="5dip"
+        android:background="@drawable/bg_btn_set_color"
+        android:src="@android:drawable/ic_menu_search" />
+
     <Button
         android:id="@+id/btn_new_note"
         android:background="@drawable/new_note"
