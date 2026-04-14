@@ -55,6 +55,7 @@ import android.widget.AdapterView.OnItemClickListener;
 import android.widget.AdapterView.OnItemLongClickListener;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ListView;
 import android.widget.PopupMenu;
 import android.widget.TextView;
@@ -97,6 +98,7 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
     private NotesListAdapter mNotesListAdapter;
     private ListView mNotesListView;
     private Button mAddNewNote;
+    private ImageButton mBtnSearch;
     private boolean mDispatch;
     private int mOriginY;
     private int mDispatchY;
@@ -209,6 +211,12 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
         mAddNewNote = (Button) findViewById(R.id.btn_new_note);
         mAddNewNote.setOnClickListener(this);
         mAddNewNote.setOnTouchListener(new NewNoteOnTouchListener());
+
+        mBtnSearch = (ImageButton) findViewById(R.id.btn_search);
+        if (mBtnSearch != null) {
+            mBtnSearch.setOnClickListener(this);
+        }
+
         mDispatch = false;
         mDispatchY = 0;
         mOriginY = 0;
@@ -522,6 +530,8 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
         int id = v.getId();
         if (id == R.id.btn_new_note) {
             createNewNote();
+        } else if (id == R.id.btn_search) {
+            onSearchRequested();
         }
     }
 

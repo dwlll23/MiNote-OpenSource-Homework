@@ -244,6 +244,14 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             getWindow().setSoftInputMode(
                     WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
                             | WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        } else if (TextUtils.equals(Intent.ACTION_SEARCH, intent.getAction())) {
+            String query = intent.getStringExtra(SearchManager.QUERY);
+            mUserQuery = query;
+            if (mWorkingNote == null) {
+                mWorkingNote = WorkingNote.createEmptyNote(this, Notes.ID_ROOT_FOLDER,
+                        AppWidgetManager.INVALID_APPWIDGET_ID, Notes.TYPE_WIDGET_INVALIDE,
+                        ResourceParser.getDefaultBgId(this));
+            }
         } else {
             Log.e(TAG, "Intent not specified action, should not support");
             finish();
