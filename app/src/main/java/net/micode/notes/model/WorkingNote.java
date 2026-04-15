@@ -42,6 +42,8 @@ public class WorkingNote {
     // Note mode
     private int mMode;
 
+    private int mFontColorId;
+
     private long mAlertDate;
 
     private long mModifiedDate;
@@ -89,6 +91,8 @@ public class WorkingNote {
 
     private static final int DATA_MODE_COLUMN = 3;
 
+    private static final int DATA_FONT_COLOR_COLUMN = 4;
+
     private static final int NOTE_PARENT_ID_COLUMN = 0;
 
     private static final int NOTE_ALERTED_DATE_COLUMN = 1;
@@ -111,6 +115,7 @@ public class WorkingNote {
         mNoteId = 0;
         mIsDeleted = false;
         mMode = 0;
+        mFontColorId = 0;
         mWidgetType = Notes.TYPE_WIDGET_INVALIDE;
     }
 
@@ -159,6 +164,7 @@ public class WorkingNote {
                     if (DataConstants.NOTE.equals(type)) {
                         mContent = cursor.getString(DATA_CONTENT_COLUMN);
                         mMode = cursor.getInt(DATA_MODE_COLUMN);
+                        mFontColorId = cursor.getInt(DATA_FONT_COLOR_COLUMN);
                         mNote.setTextDataId(cursor.getLong(DATA_ID_COLUMN));
                     } else if (DataConstants.CALL_NOTE.equals(type)) {
                         mNote.setCallDataId(cursor.getLong(DATA_ID_COLUMN));
@@ -257,6 +263,16 @@ public class WorkingNote {
         }
     }
 
+    public void setFontColorId(int id) {
+        if (id != mFontColorId) {
+            mFontColorId = id;
+            if (mNoteSettingStatusListener != null) {
+                mNoteSettingStatusListener.onFontColorChanged();
+            }
+            mNote.setTextData(TextNote.FONT_COLOR, String.valueOf(id));
+        }
+    }
+
     public void setCheckListMode(int mode) {
         if (mMode != mode) {
             if (mNoteSettingStatusListener != null) {
@@ -318,6 +334,10 @@ public class WorkingNote {
         return mBgColorId;
     }
 
+    public int getFontColorId() {
+        return mFontColorId;
+    }
+
     public int getTitleBgResId() {
         return NoteBgResources.getNoteTitleBgResource(mBgColorId);
     }
@@ -347,6 +367,11 @@ public class WorkingNote {
          * Called when the background color of current note has just changed
          */
         void onBackgroundColorChanged();
+
+        /**
+         * Called when the font color of current note has just changed
+         */
+        void onFontColorChanged();
 
         /**
          * Called when user set clock

@@ -117,11 +117,30 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         sFontSelectorSelectionMap.put(ResourceParser.TEXT_SUPER, R.id.iv_super_select);
     }
 
+    private static final Map<Integer, Integer> sFontColorBtnsMap = new HashMap<Integer, Integer>();
+    static {
+        sFontColorBtnsMap.put(R.id.iv_font_black, 0);
+        sFontColorBtnsMap.put(R.id.iv_font_gray, 1);
+        sFontColorBtnsMap.put(R.id.iv_font_blue, 2);
+        sFontColorBtnsMap.put(R.id.iv_font_green, 3);
+        sFontColorBtnsMap.put(R.id.iv_font_red, 4);
+    }
+
+    private static final Map<Integer, Integer> sFontColorSelectionMap = new HashMap<Integer, Integer>();
+    static {
+        sFontColorSelectionMap.put(0, R.id.iv_font_black_select);
+        sFontColorSelectionMap.put(1, R.id.iv_font_gray_select);
+        sFontColorSelectionMap.put(2, R.id.iv_font_blue_select);
+        sFontColorSelectionMap.put(3, R.id.iv_font_green_select);
+        sFontColorSelectionMap.put(4, R.id.iv_font_red_select);
+    }
+
     private static final String TAG = "NoteEditActivity";
 
     private HeadViewHolder mNoteHeaderHolder;
     private View mHeadViewPanel;
     private View mNoteBgColorSelector;
+    private View mFontColorSelector;
     private View mFontSizeSelector;
     private EditText mNoteEditor;
     private View mNoteEditorPanel;
@@ -279,6 +298,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         for (Integer id : sBgSelectorSelectionMap.keySet()) {
             findViewById(sBgSelectorSelectionMap.get(id)).setVisibility(View.GONE);
         }
+        for (Integer id : sFontColorSelectionMap.keySet()) {
+            findViewById(sFontColorSelectionMap.get(id)).setVisibility(View.GONE);
+        }
         mHeadViewPanel.setBackgroundResource(mWorkingNote.getTitleBgResId());
         mNoteEditorPanel.setBackgroundResource(mWorkingNote.getBgColorResId());
 
@@ -292,6 +314,8 @@ public class NoteEditActivity extends Activity implements OnClickListener,
          * is not ready
          */
         showAlertHeader();
+        // Apply font color when initializing the screen
+        onFontColorChanged();
     }
 
     private void showAlertHeader() {
@@ -340,6 +364,12 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             return true;
         }
 
+        if (mFontColorSelector != null && mFontColorSelector.getVisibility() == View.VISIBLE
+                && !inRangeOfView(mFontColorSelector, ev)) {
+            mFontColorSelector.setVisibility(View.GONE);
+            return true;
+        }
+
         if (mFontSizeSelector.getVisibility() == View.VISIBLE
                 && !inRangeOfView(mFontSizeSelector, ev)) {
             mFontSizeSelector.setVisibility(View.GONE);
@@ -378,6 +408,12 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             iv.setOnClickListener(this);
         }
 
+        mFontColorSelector = findViewById(R.id.font_color_selector);
+        for (int id : sFontColorBtnsMap.keySet()) {
+            ImageView iv = (ImageView) findViewById(id);
+            iv.setOnClickListener(this);
+        }
+
         mFontSizeSelector = findViewById(R.id.font_size_selector);
         for (int id : sFontSizeBtnsMap.keySet()) {
             View view = findViewById(id);
@@ -397,6 +433,8 @@ public class NoteEditActivity extends Activity implements OnClickListener,
 
         findViewById(R.id.btn_checklist).setOnClickListener(this);
         findViewById(R.id.btn_reminder).setOnClickListener(this);
+        // font color button
+        findViewById(R.id.btn_set_font_color).setOnClickListener(this);
     }
 
     @Override
@@ -433,11 +471,20 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             mNoteBgColorSelector.setVisibility(View.VISIBLE);
             findViewById(sBgSelectorSelectionMap.get(mWorkingNote.getBgColorId()))
                     .setVisibility(View.VISIBLE);
+        } else if (id == R.id.btn_set_font_color) {
+            mFontColorSelector.setVisibility(View.VISIBLE);
+            findViewById(sFontColorSelectionMap.get(mWorkingNote.getFontColorId()))
+                    .setVisibility(View.VISIBLE);
         } else if (sBgSelectorBtnsMap.containsKey(id)) {
             findViewById(sBgSelectorSelectionMap.get(mWorkingNote.getBgColorId()))
                     .setVisibility(View.GONE);
             mWorkingNote.setBgColorId(sBgSelectorBtnsMap.get(id));
             mNoteBgColorSelector.setVisibility(View.GONE);
+        } else if (sFontColorBtnsMap.containsKey(id)) {
+            findViewById(sFontColorSelectionMap.get(mWorkingNote.getFontColorId()))
+                    .setVisibility(View.GONE);
+            mWorkingNote.setFontColorId(sFontColorBtnsMap.get(id));
+            mFontColorSelector.setVisibility(View.GONE);
         } else if (sFontSizeBtnsMap.containsKey(id)) {
             findViewById(sFontSelectorSelectionMap.get(mFontSizeId)).setVisibility(View.GONE);
             mFontSizeId = sFontSizeBtnsMap.get(id);
@@ -473,6 +520,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         if (mNoteBgColorSelector.getVisibility() == View.VISIBLE) {
             mNoteBgColorSelector.setVisibility(View.GONE);
             return true;
+        } else if (mFontColorSelector != null && mFontColorSelector.getVisibility() == View.VISIBLE) {
+            mFontColorSelector.setVisibility(View.GONE);
+            return true;
         } else if (mFontSizeSelector.getVisibility() == View.VISIBLE) {
             mFontSizeSelector.setVisibility(View.GONE);
             return true;
@@ -485,6 +535,50 @@ public class NoteEditActivity extends Activity implements OnClickListener,
                 .setVisibility(View.VISIBLE);
         mNoteEditorPanel.setBackgroundResource(mWorkingNote.getBgColorResId());
         mHeadViewPanel.setBackgroundResource(mWorkingNote.getTitleBgResId());
+    }
+
+    public void onFontColorChanged() {
+        // Update font color selection indicator and apply text color to editor
+        // and checklist items. Color ids map to resources defined in res/values/colors.xml
+        findViewById(sFontColorSelectionMap.get(mWorkingNote.getFontColorId()))
+                .setVisibility(View.VISIBLE);
+
+        int colorRes;
+        switch (mWorkingNote.getFontColorId()) {
+            case 1:
+                colorRes = R.color.font_color_gray;
+                break;
+            case 2:
+                colorRes = R.color.font_color_blue;
+                break;
+            case 3:
+                colorRes = R.color.font_color_green;
+                break;
+            case 4:
+                colorRes = R.color.font_color_red;
+                break;
+            case 0:
+            default:
+                colorRes = R.color.font_color_black;
+                break;
+        }
+
+        int color = this.getResources().getColor(colorRes);
+        if (mWorkingNote.getCheckListMode() == TextNote.MODE_CHECK_LIST) {
+            for (int i = 0; i < mEditTextList.getChildCount(); i++) {
+                NoteEditText edit = (NoteEditText) mEditTextList.getChildAt(i)
+                        .findViewById(R.id.et_edit_text);
+                if (edit != null) {
+                    edit.setTextColor(color);
+                    edit.setTextAppearance(this,
+                            TextAppearanceResources.getTexAppearanceResource(mFontSizeId));
+                }
+            }
+        } else {
+            mNoteEditor.setTextColor(color);
+            mNoteEditor.setTextAppearance(this,
+                    TextAppearanceResources.getTexAppearanceResource(mFontSizeId));
+        }
     }
 
     @Override

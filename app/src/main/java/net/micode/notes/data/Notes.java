@@ -127,6 +127,15 @@ public class Notes {
      */
     public static final class TextNote implements DataColumns {
         public static final String MODE = DATA1;
+<<<<<<< Updated upstream
+=======
+
+        /**
+         * Font color id
+         */
+        public static final String FONT_COLOR = DATA2;
+
+>>>>>>> Stashed changes
         public static final int MODE_CHECK_LIST = 1;
 
         public static final String CONTENT_TYPE = "vnd.android.cursor.dir/text_note";

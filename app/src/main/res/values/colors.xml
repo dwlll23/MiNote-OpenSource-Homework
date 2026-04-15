@@ -17,4 +17,9 @@
 
 <resources>
     <color name="user_query_highlight">#335b5b5b</color>
+    <color name="font_color_black">#FF000000</color>
+    <color name="font_color_gray">#FF666666</color>
+    <color name="font_color_blue">#FF2B6EA6</color>
+    <color name="font_color_green">#FF3E8E41</color>
+    <color name="font_color_red">#FFCC3333</color>
 </resources>
