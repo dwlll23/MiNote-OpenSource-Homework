@@ -770,10 +770,18 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
         } else if (itemId == R.id.menu_search) {
             onSearchRequested();
         } else if (itemId == R.id.menu_sort) {
-            Toast.makeText(this, "排序功能即将实现", Toast.LENGTH_SHORT).show();
+            showSortDialog();
         }
 
         return true;
+    }
+
+    private void showSortDialog() {
+        final String[] sorts = {"按创建时间升序", "按创建时间降序", "按修改时间升序", "按修改时间降序"};
+        new AlertDialog.Builder(this)
+                .setTitle("选择排序方式")
+                .setItems(sorts, null)
+                .show();
     }
 
     @Override
