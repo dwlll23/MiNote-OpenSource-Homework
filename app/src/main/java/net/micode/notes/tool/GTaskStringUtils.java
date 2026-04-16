@@ -110,4 +110,8 @@ public class GTaskStringUtils {
 
     public final static String META_NOTE_NAME = "[META INFO] DON'T UPDATE AND DELETE";
 
+    // Alias for metadata node name used by MetaData class. Kept as a separate
+    // symbol for compatibility with existing references (MetaData.setMeta).
+    public final static String META_NODE_NAME = META_NOTE_NAME;
+
 }
