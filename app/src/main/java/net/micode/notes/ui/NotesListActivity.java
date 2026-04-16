@@ -778,9 +778,19 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
 
     private void showSortDialog() {
         final String[] sorts = {"按创建时间升序", "按创建时间降序", "按修改时间升序", "按修改时间降序"};
+        final String[] orderByValues = {
+                NoteColumns.CREATED_DATE + " ASC",
+                NoteColumns.CREATED_DATE + " DESC",
+                NoteColumns.MODIFIED_DATE + " ASC",
+                NoteColumns.MODIFIED_DATE + " DESC"
+        };
         new AlertDialog.Builder(this)
                 .setTitle("选择排序方式")
-                .setItems(sorts, null)
+                .setItems(sorts, (dialog, which) -> {
+                    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+                    prefs.edit().putString("sort_order", orderByValues[which]).apply();
+                    Toast.makeText(this, "已经排好序了", Toast.LENGTH_SHORT).show();
+                })
                 .show();
     }
 
