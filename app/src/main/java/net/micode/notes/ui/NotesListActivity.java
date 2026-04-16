@@ -387,10 +387,12 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
         String selection = (mCurrentFolderId == Notes.ID_ROOT_FOLDER)
                 ? ROOT_FOLDER_SELECTION
                 : NORMAL_SELECTION;
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        String sortOrder = prefs.getString("sort_order", NoteColumns.TYPE + " DESC," + NoteColumns.MODIFIED_DATE + " DESC");
         mBackgroundQueryHandler.startQuery(FOLDER_NOTE_LIST_QUERY_TOKEN, null,
                 Notes.CONTENT_NOTE_URI, NoteItemData.PROJECTION, selection, new String[]{
                         String.valueOf(mCurrentFolderId)
-                }, NoteColumns.TYPE + " DESC," + NoteColumns.MODIFIED_DATE + " DESC");
+                }, sortOrder);
     }
 
     private final class BackgroundQueryHandler extends AsyncQueryHandler {
