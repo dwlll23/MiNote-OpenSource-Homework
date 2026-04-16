@@ -212,9 +212,12 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
         mAddNewNote.setOnClickListener(this);
         mAddNewNote.setOnTouchListener(new NewNoteOnTouchListener());
 
-        mBtnSearch = (ImageButton) findViewById(R.id.btn_search);
-        if (mBtnSearch != null) {
-            mBtnSearch.setOnClickListener(this);
+        // Hide the dedicated search button in the list header to keep only
+        // the search entry in the overflow menu (three-dot menu). This is a
+        // minimal change: do not modify layout files, just hide the view.
+        View btnSearch = findViewById(R.id.btn_search);
+        if (btnSearch != null) {
+            btnSearch.setVisibility(View.GONE);
         }
 
         mDispatch = false;
