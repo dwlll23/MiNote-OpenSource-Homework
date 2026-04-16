@@ -792,6 +792,7 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
                     SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
                     prefs.edit().putString("sort_order", orderByValues[which]).apply();
                     Toast.makeText(this, "已经排好序了", Toast.LENGTH_SHORT).show();
+                    startAsyncNotesListQuery();
                 })
                 .show();
     }
