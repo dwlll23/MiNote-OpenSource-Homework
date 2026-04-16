@@ -31,19 +31,30 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-
+/**
+ * GTask 同步中的任务节点（对应 Google Tasks 中的一项任务）。
+ *
+ * 继承自 {@link Node}，实现了任务在本地便签与远程 Google Tasks 服务之间的数据转换、
+ * 同步动作决策以及 JSON 序列化/反序列化。每个 Task 实例可以关联一个便签（TYPE_NOTE），
+ * 并维护其在任务列表中的位置（前驱兄弟节点和父列表）。
+ *
+ * 主要功能：
+ *     生成创建/更新任务的 JSON 动作（{@link #getCreateAction} / {@link #getUpdateAction}）
+ *     从远程 JSON 或本地便签 JSON 设置任务内容
+ *     将任务内容转换为本地便签 JSON（用于保存到数据库）
+ *     根据本地数据库记录和远程状态决定同步动作（{@link #getSyncAction}）
+ *     管理任务的元数据（{@link #mMetaInfo}，来自 {@link MetaData} 节点）
+ * 
+ *
+ */
 public class Task extends Node {
     private static final String TAG = Task.class.getSimpleName();
 
-    private boolean mCompleted;
-
-    private String mNotes;
-
-    private JSONObject mMetaInfo;
-
-    private Task mPriorSibling;
-
-    private TaskList mParent;
+    private boolean mCompleted;          // 任务是否已完成
+    private String mNotes;               // 任务的备注信息（对应便签的详细内容）
+    private JSONObject mMetaInfo;        // 从 MetaData 节点解析的元数据 JSON（包含原始便签结构）
+    private Task mPriorSibling;          // 在同一父列表中的前一个兄弟任务（用于维护顺序）
+    private TaskList mParent;            // 所属的任务列表（父节点）
 
     public Task() {
         super();
@@ -54,21 +65,28 @@ public class Task extends Node {
         mMetaInfo = null;
     }
 
+    /**
+     * 生成创建任务的 JSON 动作（用于向远程服务器发送创建请求）。
+     *
+     * @param actionId 动作的唯一标识 ID
+     * @return 包含创建动作信息的 JSON 对象
+     * @throws ActionFailureException 生成失败时抛出
+     */
     public JSONObject getCreateAction(int actionId) {
         JSONObject js = new JSONObject();
 
         try {
-            // action_type
+            // 动作类型：创建
             js.put(GTaskStringUtils.GTASK_JSON_ACTION_TYPE,
                     GTaskStringUtils.GTASK_JSON_ACTION_TYPE_CREATE);
 
-            // action_id
+            // 动作 ID
             js.put(GTaskStringUtils.GTASK_JSON_ACTION_ID, actionId);
 
-            // index
+            // 在父列表中的位置索引（由父列表计算）
             js.put(GTaskStringUtils.GTASK_JSON_INDEX, mParent.getChildTaskIndex(this));
 
-            // entity_delta
+            // 实体数据（entity_delta）
             JSONObject entity = new JSONObject();
             entity.put(GTaskStringUtils.GTASK_JSON_NAME, getName());
             entity.put(GTaskStringUtils.GTASK_JSON_CREATOR_ID, "null");
@@ -79,17 +97,17 @@ public class Task extends Node {
             }
             js.put(GTaskStringUtils.GTASK_JSON_ENTITY_DELTA, entity);
 
-            // parent_id
+            // 父节点 ID（所属任务列表的 GID）
             js.put(GTaskStringUtils.GTASK_JSON_PARENT_ID, mParent.getGid());
 
-            // dest_parent_type
+            // 目标父节点类型：分组（任务列表）
             js.put(GTaskStringUtils.GTASK_JSON_DEST_PARENT_TYPE,
                     GTaskStringUtils.GTASK_JSON_TYPE_GROUP);
 
-            // list_id
+            // 列表 ID（同父节点 ID）
             js.put(GTaskStringUtils.GTASK_JSON_LIST_ID, mParent.getGid());
 
-            // prior_sibling_id
+            // 前驱兄弟节点 ID（用于维护顺序）
             if (mPriorSibling != null) {
                 js.put(GTaskStringUtils.GTASK_JSON_PRIOR_SIBLING_ID, mPriorSibling.getGid());
             }
@@ -103,21 +121,28 @@ public class Task extends Node {
         return js;
     }
 
+    /**
+     * 生成更新任务的 JSON 动作（用于向远程服务器发送更新请求）。
+     *
+     * @param actionId 动作的唯一标识 ID
+     * @return 包含更新动作信息的 JSON 对象
+     * @throws ActionFailureException 生成失败时抛出
+     */
     public JSONObject getUpdateAction(int actionId) {
         JSONObject js = new JSONObject();
 
         try {
-            // action_type
+            // 动作类型：更新
             js.put(GTaskStringUtils.GTASK_JSON_ACTION_TYPE,
                     GTaskStringUtils.GTASK_JSON_ACTION_TYPE_UPDATE);
 
-            // action_id
+            // 动作 ID
             js.put(GTaskStringUtils.GTASK_JSON_ACTION_ID, actionId);
 
-            // id
+            // 任务的 GID
             js.put(GTaskStringUtils.GTASK_JSON_ID, getGid());
 
-            // entity_delta
+            // 实体数据（entity_delta）
             JSONObject entity = new JSONObject();
             entity.put(GTaskStringUtils.GTASK_JSON_NAME, getName());
             if (getNotes() != null) {
@@ -135,35 +160,30 @@ public class Task extends Node {
         return js;
     }
 
+    /**
+     * 从远程服务器返回的 JSON 设置当前任务的内容。
+     *
+     * @param js 远程 JSON 对象（包含 id, last_modified, name, notes, deleted, completed 等字段）
+     * @throws ActionFailureException 解析失败时抛出
+     */
     public void setContentByRemoteJSON(JSONObject js) {
         if (js != null) {
             try {
-                // id
                 if (js.has(GTaskStringUtils.GTASK_JSON_ID)) {
                     setGid(js.getString(GTaskStringUtils.GTASK_JSON_ID));
                 }
-
-                // last_modified
                 if (js.has(GTaskStringUtils.GTASK_JSON_LAST_MODIFIED)) {
                     setLastModified(js.getLong(GTaskStringUtils.GTASK_JSON_LAST_MODIFIED));
                 }
-
-                // name
                 if (js.has(GTaskStringUtils.GTASK_JSON_NAME)) {
                     setName(js.getString(GTaskStringUtils.GTASK_JSON_NAME));
                 }
-
-                // notes
                 if (js.has(GTaskStringUtils.GTASK_JSON_NOTES)) {
                     setNotes(js.getString(GTaskStringUtils.GTASK_JSON_NOTES));
                 }
-
-                // deleted
                 if (js.has(GTaskStringUtils.GTASK_JSON_DELETED)) {
                     setDeleted(js.getBoolean(GTaskStringUtils.GTASK_JSON_DELETED));
                 }
-
-                // completed
                 if (js.has(GTaskStringUtils.GTASK_JSON_COMPLETED)) {
                     setCompleted(js.getBoolean(GTaskStringUtils.GTASK_JSON_COMPLETED));
                 }
@@ -175,6 +195,12 @@ public class Task extends Node {
         }
     }
 
+    /**
+     * 从本地便签的 JSON 表示设置任务内容。
+     * 主要用于从数据库读取的便签数据（通过 SqlNote.getContent() 生成的 JSON）还原任务。
+     *
+     * @param js 本地便签 JSON（包含 META_HEAD_NOTE 和 META_HEAD_DATA）
+     */
     public void setContentByLocalJSON(JSONObject js) {
         if (js == null || !js.has(GTaskStringUtils.META_HEAD_NOTE)
                 || !js.has(GTaskStringUtils.META_HEAD_DATA)) {
@@ -190,6 +216,7 @@ public class Task extends Node {
                 return;
             }
 
+            // 从 data 数组中查找 MIME_TYPE 为 NOTE 的数据项，将其 CONTENT 作为任务名称
             for (int i = 0; i < dataArray.length(); i++) {
                 JSONObject data = dataArray.getJSONObject(i);
                 if (TextUtils.equals(data.getString(DataColumns.MIME_TYPE), DataConstants.NOTE)) {
@@ -204,11 +231,18 @@ public class Task extends Node {
         }
     }
 
+    /**
+     * 将当前任务的内容转换为本地便签的 JSON 格式。
+     * 如果任务没有关联的元数据（mMetaInfo 为 null），则根据任务名称新建一个简单便签 JSON；
+     * 否则基于已有的元数据更新便签内容（仅更新 NAME 字段对应的 data 内容）。
+     *
+     * @return 本地便签 JSON 对象，若任务为空或转换失败则返回 null
+     */
     public JSONObject getLocalJSONFromContent() {
         String name = getName();
         try {
             if (mMetaInfo == null) {
-                // new task created from web
+                // 从远程同步的新任务，没有关联的元数据：创建一个新的便签 JSON
                 if (name == null) {
                     Log.w(TAG, "the note seems to be an empty one");
                     return null;
@@ -225,7 +259,7 @@ public class Task extends Node {
                 js.put(GTaskStringUtils.META_HEAD_NOTE, note);
                 return js;
             } else {
-                // synced task
+                // 已有元数据（曾经同步过的任务）：复用原有 JSON 结构，只更新任务名称
                 JSONObject note = mMetaInfo.getJSONObject(GTaskStringUtils.META_HEAD_NOTE);
                 JSONArray dataArray = mMetaInfo.getJSONArray(GTaskStringUtils.META_HEAD_DATA);
 
@@ -247,6 +281,12 @@ public class Task extends Node {
         }
     }
 
+    /**
+     * 设置任务的元数据（来自 MetaData 节点）。
+     * 元数据中保存了任务对应的原始便签结构（用于本地-远程映射）。
+     *
+     * @param metaData MetaData 对象，其 notes 字段为 JSON 字符串
+     */
     public void setMetaInfo(MetaData metaData) {
         if (metaData != null && metaData.getNotes() != null) {
             try {
@@ -258,6 +298,13 @@ public class Task extends Node {
         }
     }
 
+    /**
+     * 根据本地数据库游标和当前任务状态，决定需要执行的同步动作。
+     * 同步动作类型定义在 {@link Node} 中（如 ADD_REMOTE、UPDATE_LOCAL、UPDATE_CONFLICT 等）。
+     *
+     * @param c 指向 note 表中当前便签记录的游标（必须包含 SqlNote 中定义的投影列）
+     * @return 同步动作常量，若出错则返回 {@link #SYNC_ACTION_ERROR}
+     */
     public int getSyncAction(Cursor c) {
         try {
             JSONObject noteInfo = null;
@@ -267,39 +314,40 @@ public class Task extends Node {
 
             if (noteInfo == null) {
                 Log.w(TAG, "it seems that note meta has been deleted");
-                return SYNC_ACTION_UPDATE_REMOTE;
+                return SYNC_ACTION_UPDATE_REMOTE;   // 本地元数据丢失，用本地数据覆盖远程
             }
 
             if (!noteInfo.has(NoteColumns.ID)) {
                 Log.w(TAG, "remote note id seems to be deleted");
-                return SYNC_ACTION_UPDATE_LOCAL;
+                return SYNC_ACTION_UPDATE_LOCAL;    // 远程便签 ID 丢失，用远程数据覆盖本地
             }
 
-            // validate the note id now
+            // 校验本地便签 ID 是否与元数据中记录的一致
             if (c.getLong(SqlNote.ID_COLUMN) != noteInfo.getLong(NoteColumns.ID)) {
                 Log.w(TAG, "note id doesn't match");
                 return SYNC_ACTION_UPDATE_LOCAL;
             }
 
             if (c.getInt(SqlNote.LOCAL_MODIFIED_COLUMN) == 0) {
-                // there is no local update
+                // 本地无修改
                 if (c.getLong(SqlNote.SYNC_ID_COLUMN) == getLastModified()) {
-                    // no update both side
+                    // 双方同步 ID 一致，无需同步
                     return SYNC_ACTION_NONE;
                 } else {
-                    // apply remote to local
+                    // 远程有更新，用远程覆盖本地
                     return SYNC_ACTION_UPDATE_LOCAL;
                 }
             } else {
-                // validate gtask id
+                // 本地有修改
                 if (!c.getString(SqlNote.GTASK_ID_COLUMN).equals(getGid())) {
                     Log.e(TAG, "gtask id doesn't match");
                     return SYNC_ACTION_ERROR;
                 }
                 if (c.getLong(SqlNote.SYNC_ID_COLUMN) == getLastModified()) {
-                    // local modification only
+                    // 仅本地修改，远程未变，用本地覆盖远程
                     return SYNC_ACTION_UPDATE_REMOTE;
                 } else {
+                    // 双方均有修改，产生冲突
                     return SYNC_ACTION_UPDATE_CONFLICT;
                 }
             }
@@ -311,10 +359,16 @@ public class Task extends Node {
         return SYNC_ACTION_ERROR;
     }
 
+    /**
+     * 判断当前任务是否值得保存（即是否包含有效数据）。
+     *
+     * @return true 如果任务包含元数据、非空名称或非空备注，否则 false
+     */
     public boolean isWorthSaving() {
         return mMetaInfo != null || (getName() != null && getName().trim().length() > 0)
                 || (getNotes() != null && getNotes().trim().length() > 0);
     }
+
 
     public void setCompleted(boolean completed) {
         this.mCompleted = completed;
@@ -347,5 +401,4 @@ public class Task extends Node {
     public TaskList getParent() {
         return this.mParent;
     }
-
 }
