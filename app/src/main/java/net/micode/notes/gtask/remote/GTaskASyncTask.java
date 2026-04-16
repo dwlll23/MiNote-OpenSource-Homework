@@ -32,40 +32,72 @@ import net.micode.notes.R;
 import net.micode.notes.ui.NotesListActivity;
 import net.micode.notes.ui.NotesPreferenceActivity;
 
+/**
+ * GTask 同步的异步任务封装。
+ *
+ * 继承自 {@link AsyncTask}，在后台线程中执行 Google Tasks 同步操作，
+ * 并通过通知栏向用户展示同步进度和结果。同时支持取消同步和进度更新。
+ *
+ * 主要功能：
+ *     在后台执行 {@link GTaskManager#sync} 同步逻辑
+ *     通过通知栏显示同步进度、成功、失败或取消状态
+ *     支持取消同步（{@link #cancelSync()}）
+ *     同步完成后通过 {@link OnCompleteListener} 回调通知调用方
+ */
 public class GTaskASyncTask extends AsyncTask<Void, String, Integer> {
 
-    private static final int GTASK_SYNC_NOTIFICATION_ID = 5234235;
-    private static final String GTASK_SYNC_CHANNEL_ID = "gtask_sync_channel";
+    private static final int GTASK_SYNC_NOTIFICATION_ID = 5234235;       // 通知 ID
+    private static final String GTASK_SYNC_CHANNEL_ID = "gtask_sync_channel"; // 通知渠道 ID（Android 8.0+）
 
+    /**
+     * 同步完成监听器接口。
+     */
     public interface OnCompleteListener {
+        /**
+         * 同步任务完成时回调（无论成功或失败）。
+         */
         void onComplete();
     }
 
     private Context mContext;
-
     private NotificationManager mNotifiManager;
-
-    private GTaskManager mTaskManager;
-
+    private GTaskManager mTaskManager;                // GTask 同步管理器
     private OnCompleteListener mOnCompleteListener;
 
+    /**
+     * 构造 GTask 异步任务。
+     *
+     * @param context  上下文，用于获取通知服务和显示资源
+     * @param listener 同步完成后的回调（可为 null）
+     */
     public GTaskASyncTask(Context context, OnCompleteListener listener) {
         mContext = context;
         mOnCompleteListener = listener;
         mNotifiManager = (NotificationManager) mContext
                 .getSystemService(Context.NOTIFICATION_SERVICE);
         mTaskManager = GTaskManager.getInstance();
-        createNotificationChannelIfNeeded();
+        createNotificationChannelIfNeeded();   // Android 8.0+ 创建通知渠道
     }
 
+    /**
+     * 取消正在进行的同步。
+     */
     public void cancelSync() {
         mTaskManager.cancelSync();
     }
 
+    /**
+     * 发布进度消息（供 GTaskManager 调用）。
+     *
+     * @param message 进度文本
+     */
     public void publishProgess(String message) {
         publishProgress(new String[]{message});
     }
 
+    /**
+     * 创建通知渠道（Android 8.0 以上需要）。
+     */
     private void createNotificationChannelIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
@@ -78,8 +110,15 @@ public class GTaskASyncTask extends AsyncTask<Void, String, Integer> {
         }
     }
 
+    /**
+     * 显示通知栏消息。
+     *
+     * @param tickerId 通知栏提示文字的资源 ID（如 R.string.ticker_syncing）
+     * @param content  通知内容文本
+     */
     private void showNotification(int tickerId, String content) {
         Intent intent;
+        // 根据同步结果决定点击通知后跳转的界面：成功跳转便签列表，失败/进行中跳转设置页
         if (tickerId != R.string.ticker_success) {
             intent = new Intent(mContext, NotesPreferenceActivity.class);
         } else {
@@ -109,6 +148,12 @@ public class GTaskASyncTask extends AsyncTask<Void, String, Integer> {
                 .notify(GTASK_SYNC_NOTIFICATION_ID, notification);
     }
 
+    /**
+     * 后台执行同步操作。
+     *
+     * @param unused 无参数
+     * @return 同步结果状态码（如 STATE_SUCCESS、STATE_NETWORK_ERROR 等）
+     */
     @Override
     protected Integer doInBackground(Void... unused) {
         publishProgess(mContext.getString(
@@ -118,14 +163,25 @@ public class GTaskASyncTask extends AsyncTask<Void, String, Integer> {
         return mTaskManager.sync(mContext, this);
     }
 
+    /**
+     * 进度更新时调用（在主线程），显示通知栏进度并可选地发送广播。
+     *
+     * @param progress 进度消息数组
+     */
     @Override
     protected void onProgressUpdate(String... progress) {
         showNotification(R.string.ticker_syncing, progress[0]);
+        // 如果当前上下文是 GTaskSyncService，则通过广播发送进度（用于 UI 更新）
         if (mContext instanceof GTaskSyncService) {
             ((GTaskSyncService) mContext).sendBroadcast(progress[0]);
         }
     }
 
+    /**
+     * 同步完成时调用（在主线程），根据结果显示相应的通知，并触发完成回调。
+     *
+     * @param result 同步结果状态码
+     */
     @Override
     protected void onPostExecute(Integer result) {
         if (result == GTaskManager.STATE_SUCCESS) {
@@ -151,6 +207,7 @@ public class GTaskASyncTask extends AsyncTask<Void, String, Integer> {
             );
         }
 
+        // 触发完成回调（在新线程中执行，避免阻塞主线程）
         if (mOnCompleteListener != null) {
             new Thread(new Runnable() {
                 @Override

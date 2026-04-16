@@ -60,35 +60,38 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 
-
+/**
+ * Google Tasks 同步的 HTTP 客户端（单例）。
+ *
+ * 封装了与 Google Tasks 服务通信的所有底层细节，包括：
+ *     使用 Google 账户认证并登录 GTask 服务
+ *     创建、更新、删除任务（Task）和任务列表（TaskList）
+ *     批量提交更新操作（通过 update array）
+ *     获取任务列表及任务详情
+ *     支持自定义域（非 gmail.com 账户）的登录
+ *
+ * 注意：该类为单例，需先调用 {@link #login(Activity)} 登录成功后才能执行其他操作。
+ * 内部维护一个 actionId 自增计数器，用于标识每次请求的动作；同时支持将多个更新操作
+ * 暂存到 mUpdateArray 中批量提交，减少网络请求次数。
+ */
 public class GTaskClient {
     private static final String TAG = GTaskClient.class.getSimpleName();
 
     private static final String GTASK_URL = "https://mail.google.com/tasks/";
-
     private static final String GTASK_GET_URL = "https://mail.google.com/tasks/ig";
-
     private static final String GTASK_POST_URL = "https://mail.google.com/tasks/r/ig";
 
     private static GTaskClient mInstance = null;
 
-    private DefaultHttpClient mHttpClient;
-
-    private String mGetUrl;
-
-    private String mPostUrl;
-
-    private long mClientVersion;
-
-    private boolean mLoggedin;
-
-    private long mLastLoginTime;
-
-    private int mActionId;
-
-    private Account mAccount;
-
-    private JSONArray mUpdateArray;
+    private DefaultHttpClient mHttpClient;          // HTTP 客户端
+    private String mGetUrl;                         // GET 请求 URL（用于登录和获取数据）
+    private String mPostUrl;                        // POST 请求 URL（用于提交操作）
+    private long mClientVersion;                    // 从服务端获取的客户端版本号
+    private boolean mLoggedin;                      // 是否已登录 GTask 服务
+    private long mLastLoginTime;                    // 上次登录时间（用于判断是否需要重新登录）
+    private int mActionId;                          // 动作 ID 自增计数器
+    private Account mAccount;                       // 当前使用的 Google 账户
+    private JSONArray mUpdateArray;                 // 暂存的更新动作列表（批量提交）
 
     private GTaskClient() {
         mHttpClient = null;
@@ -102,6 +105,9 @@ public class GTaskClient {
         mUpdateArray = null;
     }
 
+    /**
+     * 获取 GTaskClient 单例实例。
+     */
     public static synchronized GTaskClient getInstance() {
         if (mInstance == null) {
             mInstance = new GTaskClient();
@@ -109,15 +115,21 @@ public class GTaskClient {
         return mInstance;
     }
 
+    /**
+     * 登录 GTask 服务（包含账户认证和 Cookie 获取）。
+     * 登录有效期约为 5 分钟，超时或账户切换后会重新登录。
+     *
+     * @param activity 用于获取账户管理器及弹窗的 Activity
+     * @return true 登录成功，false 失败
+     */
     public boolean login(Activity activity) {
-        // we suppose that the cookie would expire after 5 minutes
-        // then we need to re-login
+        // 5 分钟内且未切换账户，认为登录仍有效
         final long interval = 1000 * 60 * 5;
         if (mLastLoginTime + interval < System.currentTimeMillis()) {
             mLoggedin = false;
         }
 
-        // need to re-login after account switch
+        // 检查账户是否切换
         if (mLoggedin
                 && !TextUtils.equals(getSyncAccount().name, NotesPreferenceActivity
                         .getSyncAccountName(activity))) {
@@ -136,7 +148,7 @@ public class GTaskClient {
             return false;
         }
 
-        // login with custom domain if necessary
+        // 处理自定义域（非 gmail.com / googlemail.com）账户：修改请求 URL
         if (!(mAccount.name.toLowerCase().endsWith("gmail.com") || mAccount.name.toLowerCase()
                 .endsWith("googlemail.com"))) {
             StringBuilder url = new StringBuilder(GTASK_URL).append("a/");
@@ -151,7 +163,7 @@ public class GTaskClient {
             }
         }
 
-        // try to login with google official url
+        // 尝试使用官方 URL 登录
         if (!mLoggedin) {
             mGetUrl = GTASK_GET_URL;
             mPostUrl = GTASK_POST_URL;
@@ -164,6 +176,13 @@ public class GTaskClient {
         return true;
     }
 
+    /**
+     * 登录 Google 账户，获取 AuthToken。
+     *
+     * @param activity        上下文 Activity
+     * @param invalidateToken 是否使当前 token 失效并重新获取
+     * @return AuthToken 字符串，失败返回 null
+     */
     private String loginGoogleAccount(Activity activity, boolean invalidateToken) {
         String authToken;
         AccountManager accountManager = AccountManager.get(activity);
@@ -189,7 +208,7 @@ public class GTaskClient {
             return null;
         }
 
-        // get the token now
+        // 获取 AuthToken
         AccountManagerFuture<Bundle> accountManagerFuture = accountManager.getAuthToken(account,
                 "goanna_mobile", null, activity, null, null);
         try {
@@ -207,10 +226,16 @@ public class GTaskClient {
         return authToken;
     }
 
+    /**
+     * 使用 AuthToken 尝试登录 GTask 服务。
+     *
+     * @param activity  上下文
+     * @param authToken Google 账户的 AuthToken
+     * @return true 登录成功，false 失败
+     */
     private boolean tryToLoginGtask(Activity activity, String authToken) {
         if (!loginGtask(authToken)) {
-            // maybe the auth token is out of date, now let's invalidate the
-            // token and try again
+            // token 可能过期，使其失效后重试
             authToken = loginGoogleAccount(activity, true);
             if (authToken == null) {
                 Log.e(TAG, "login google account failed");
@@ -225,6 +250,12 @@ public class GTaskClient {
         return true;
     }
 
+    /**
+     * 执行实际的 GTask 登录请求，设置 HttpClient 并解析客户端版本。
+     *
+     * @param authToken Google AuthToken
+     * @return true 成功，false 失败
+     */
     private boolean loginGtask(String authToken) {
         int timeoutConnection = 10000;
         int timeoutSocket = 15000;
@@ -236,14 +267,14 @@ public class GTaskClient {
         mHttpClient.setCookieStore(localBasicCookieStore);
         HttpProtocolParams.setUseExpectContinue(mHttpClient.getParams(), false);
 
-        // login gtask
+        // 发送 GET 请求，携带 auth 参数
         try {
             String loginUrl = mGetUrl + "?auth=" + authToken;
             HttpGet httpGet = new HttpGet(loginUrl);
             HttpResponse response = null;
             response = mHttpClient.execute(httpGet);
 
-            // get the cookie now
+            // 检查 Cookie 中是否包含 GTL 认证 Cookie
             List<Cookie> cookies = mHttpClient.getCookieStore().getCookies();
             boolean hasAuthCookie = false;
             for (Cookie cookie : cookies) {
@@ -255,7 +286,7 @@ public class GTaskClient {
                 Log.w(TAG, "it seems that there is no auth cookie");
             }
 
-            // get the client version
+            // 从响应中提取客户端版本号
             String resString = getResponseContent(response.getEntity());
             String jsBegin = "_setup(";
             String jsEnd = ")}</script>";
@@ -272,7 +303,6 @@ public class GTaskClient {
             e.printStackTrace();
             return false;
         } catch (Exception e) {
-            // simply catch all exceptions
             Log.e(TAG, "httpget gtask_url failed");
             return false;
         }
@@ -280,10 +310,16 @@ public class GTaskClient {
         return true;
     }
 
+    /**
+     * 生成下一个动作 ID（自增）。
+     */
     private int getActionId() {
         return mActionId++;
     }
 
+    /**
+     * 创建 HTTP POST 请求对象，设置公共请求头。
+     */
     private HttpPost createHttpPost() {
         HttpPost httpPost = new HttpPost(mPostUrl);
         httpPost.setHeader("Content-Type", "application/x-www-form-urlencoded;charset=utf-8");
@@ -291,6 +327,13 @@ public class GTaskClient {
         return httpPost;
     }
 
+    /**
+     * 从 HTTP 响应实体中读取字符串内容，支持 gzip 和 deflate 解压。
+     *
+     * @param entity HTTP 响应实体
+     * @return 响应字符串
+     * @throws IOException 读取失败
+     */
     private String getResponseContent(HttpEntity entity) throws IOException {
         String contentEncoding = null;
         if (entity.getContentEncoding() != null) {
@@ -323,6 +366,14 @@ public class GTaskClient {
         }
     }
 
+    /**
+     * 发送 POST 请求到 GTask 服务器。
+     *
+     * @param js 请求的 JSON 对象
+     * @return 服务器响应的 JSON 对象
+     * @throws NetworkFailureException 网络请求失败
+     * @throws ActionFailureException  响应解析失败或未登录
+     */
     private JSONObject postRequest(JSONObject js) throws NetworkFailureException {
         if (!mLoggedin) {
             Log.e(TAG, "please login first");
@@ -336,7 +387,6 @@ public class GTaskClient {
             UrlEncodedFormEntity entity = new UrlEncodedFormEntity(list, "UTF-8");
             httpPost.setEntity(entity);
 
-            // execute the post
             HttpResponse response = mHttpClient.execute(httpPost);
             String jsString = getResponseContent(response.getEntity());
             return new JSONObject(jsString);
@@ -360,20 +410,22 @@ public class GTaskClient {
         }
     }
 
+    /**
+     * 创建新任务（发送创建动作到服务器）。
+     *
+     * @param task 要创建的任务对象（其内部已准备好创建动作）
+     * @throws NetworkFailureException 网络失败
+     */
     public void createTask(Task task) throws NetworkFailureException {
-        commitUpdate();
+        commitUpdate();  // 先提交之前的批量更新
         try {
             JSONObject jsPost = new JSONObject();
             JSONArray actionList = new JSONArray();
 
-            // action_list
             actionList.put(task.getCreateAction(getActionId()));
             jsPost.put(GTaskStringUtils.GTASK_JSON_ACTION_LIST, actionList);
-
-            // client_version
             jsPost.put(GTaskStringUtils.GTASK_JSON_CLIENT_VERSION, mClientVersion);
 
-            // post
             JSONObject jsResponse = postRequest(jsPost);
             JSONObject jsResult = (JSONObject) jsResponse.getJSONArray(
                     GTaskStringUtils.GTASK_JSON_RESULTS).get(0);
@@ -386,20 +438,22 @@ public class GTaskClient {
         }
     }
 
+    /**
+     * 创建新任务列表。
+     *
+     * @param tasklist 要创建的任务列表对象
+     * @throws NetworkFailureException 网络失败
+     */
     public void createTaskList(TaskList tasklist) throws NetworkFailureException {
         commitUpdate();
         try {
             JSONObject jsPost = new JSONObject();
             JSONArray actionList = new JSONArray();
 
-            // action_list
             actionList.put(tasklist.getCreateAction(getActionId()));
             jsPost.put(GTaskStringUtils.GTASK_JSON_ACTION_LIST, actionList);
-
-            // client version
             jsPost.put(GTaskStringUtils.GTASK_JSON_CLIENT_VERSION, mClientVersion);
 
-            // post
             JSONObject jsResponse = postRequest(jsPost);
             JSONObject jsResult = (JSONObject) jsResponse.getJSONArray(
                     GTaskStringUtils.GTASK_JSON_RESULTS).get(0);
@@ -412,15 +466,17 @@ public class GTaskClient {
         }
     }
 
+    /**
+     * 提交所有暂存的更新动作（批量提交）。
+     *
+     * @throws NetworkFailureException 网络失败
+     */
     public void commitUpdate() throws NetworkFailureException {
         if (mUpdateArray != null) {
             try {
                 JSONObject jsPost = new JSONObject();
 
-                // action_list
                 jsPost.put(GTaskStringUtils.GTASK_JSON_ACTION_LIST, mUpdateArray);
-
-                // client_version
                 jsPost.put(GTaskStringUtils.GTASK_JSON_CLIENT_VERSION, mClientVersion);
 
                 postRequest(jsPost);
@@ -433,10 +489,16 @@ public class GTaskClient {
         }
     }
 
+    /**
+     * 将节点的更新动作添加到批量更新队列中。
+     * 若队列长度超过 10 则自动提交。
+     *
+     * @param node 需要更新的节点（Task 或 TaskList）
+     * @throws NetworkFailureException 网络失败（仅在自动提交时可能抛出）
+     */
     public void addUpdateNode(Node node) throws NetworkFailureException {
         if (node != null) {
-            // too many update items may result in an error
-            // set max to 10 items
+            // 避免一次提交过多，上限 10 项
             if (mUpdateArray != null && mUpdateArray.length() > 10) {
                 commitUpdate();
             }
@@ -447,6 +509,14 @@ public class GTaskClient {
         }
     }
 
+    /**
+     * 移动任务到新的位置（同一列表内改变顺序，或移动到另一个列表）。
+     *
+     * @param task       要移动的任务
+     * @param preParent  移动前的父列表
+     * @param curParent  移动后的父列表
+     * @throws NetworkFailureException 网络失败
+     */
     public void moveTask(Task task, TaskList preParent, TaskList curParent)
             throws NetworkFailureException {
         commitUpdate();
@@ -455,26 +525,22 @@ public class GTaskClient {
             JSONArray actionList = new JSONArray();
             JSONObject action = new JSONObject();
 
-            // action_list
             action.put(GTaskStringUtils.GTASK_JSON_ACTION_TYPE,
                     GTaskStringUtils.GTASK_JSON_ACTION_TYPE_MOVE);
             action.put(GTaskStringUtils.GTASK_JSON_ACTION_ID, getActionId());
             action.put(GTaskStringUtils.GTASK_JSON_ID, task.getGid());
             if (preParent == curParent && task.getPriorSibling() != null) {
-                // put prioring_sibing_id only if moving within the tasklist and
-                // it is not the first one
+                // 同一列表内移动且不是第一个任务时，需要指定前驱兄弟节点
                 action.put(GTaskStringUtils.GTASK_JSON_PRIOR_SIBLING_ID, task.getPriorSibling());
             }
             action.put(GTaskStringUtils.GTASK_JSON_SOURCE_LIST, preParent.getGid());
             action.put(GTaskStringUtils.GTASK_JSON_DEST_PARENT, curParent.getGid());
             if (preParent != curParent) {
-                // put the dest_list only if moving between tasklists
+                // 跨列表移动时需要指定目标列表
                 action.put(GTaskStringUtils.GTASK_JSON_DEST_LIST, curParent.getGid());
             }
             actionList.put(action);
             jsPost.put(GTaskStringUtils.GTASK_JSON_ACTION_LIST, actionList);
-
-            // client_version
             jsPost.put(GTaskStringUtils.GTASK_JSON_CLIENT_VERSION, mClientVersion);
 
             postRequest(jsPost);
@@ -486,18 +552,21 @@ public class GTaskClient {
         }
     }
 
+    /**
+     * 删除节点（标记为删除并提交）。
+     *
+     * @param node 要删除的节点
+     * @throws NetworkFailureException 网络失败
+     */
     public void deleteNode(Node node) throws NetworkFailureException {
         commitUpdate();
         try {
             JSONObject jsPost = new JSONObject();
             JSONArray actionList = new JSONArray();
 
-            // action_list
             node.setDeleted(true);
             actionList.put(node.getUpdateAction(getActionId()));
             jsPost.put(GTaskStringUtils.GTASK_JSON_ACTION_LIST, actionList);
-
-            // client_version
             jsPost.put(GTaskStringUtils.GTASK_JSON_CLIENT_VERSION, mClientVersion);
 
             postRequest(jsPost);
@@ -509,6 +578,12 @@ public class GTaskClient {
         }
     }
 
+    /**
+     * 获取所有任务列表（仅列表元信息，不含任务）。
+     *
+     * @return JSONArray，每个元素是一个列表的 JSON 对象
+     * @throws NetworkFailureException 网络失败
+     */
     public JSONArray getTaskLists() throws NetworkFailureException {
         if (!mLoggedin) {
             Log.e(TAG, "please login first");
@@ -520,7 +595,6 @@ public class GTaskClient {
             HttpResponse response = null;
             response = mHttpClient.execute(httpGet);
 
-            // get the task list
             String resString = getResponseContent(response.getEntity());
             String jsBegin = "_setup(";
             String jsEnd = ")}</script>";
@@ -547,6 +621,13 @@ public class GTaskClient {
         }
     }
 
+    /**
+     * 获取指定任务列表中的所有任务（包括已完成和未完成）。
+     *
+     * @param listGid 任务列表的 GID
+     * @return JSONArray，每个元素是一个任务的 JSON 对象
+     * @throws NetworkFailureException 网络失败
+     */
     public JSONArray getTaskList(String listGid) throws NetworkFailureException {
         commitUpdate();
         try {
@@ -554,7 +635,6 @@ public class GTaskClient {
             JSONArray actionList = new JSONArray();
             JSONObject action = new JSONObject();
 
-            // action_list
             action.put(GTaskStringUtils.GTASK_JSON_ACTION_TYPE,
                     GTaskStringUtils.GTASK_JSON_ACTION_TYPE_GETALL);
             action.put(GTaskStringUtils.GTASK_JSON_ACTION_ID, getActionId());
@@ -562,8 +642,6 @@ public class GTaskClient {
             action.put(GTaskStringUtils.GTASK_JSON_GET_DELETED, false);
             actionList.put(action);
             jsPost.put(GTaskStringUtils.GTASK_JSON_ACTION_LIST, actionList);
-
-            // client_version
             jsPost.put(GTaskStringUtils.GTASK_JSON_CLIENT_VERSION, mClientVersion);
 
             JSONObject jsResponse = postRequest(jsPost);
@@ -575,10 +653,18 @@ public class GTaskClient {
         }
     }
 
+    /**
+     * 获取当前使用的同步账户。
+     *
+     * @return Account 对象
+     */
     public Account getSyncAccount() {
         return mAccount;
     }
 
+    /**
+     * 重置批量更新数组（丢弃未提交的更新）。
+     */
     public void resetUpdateArray() {
         mUpdateArray = null;
     }
