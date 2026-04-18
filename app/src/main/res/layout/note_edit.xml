@@ -79,7 +79,9 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:layout_marginLeft="5dip"
-                android:background="@drawable/bg_btn_set_color" />
+                android:background="@drawable/bg_btn_set_color"
+                android:src="@drawable/font_normal"
+                android:contentDescription="@string/menu_font_normal" />
 
             <ImageButton
                 android:id="@+id/btn_set_bg_color"
