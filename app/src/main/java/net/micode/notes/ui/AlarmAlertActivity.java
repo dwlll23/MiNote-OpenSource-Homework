@@ -39,21 +39,38 @@ import net.micode.notes.tool.DataUtils;
 
 import java.io.IOException;
 
-
+/**
+ * 便签提醒闹钟的弹窗 Activity。
+ *
+ * 当设定的提醒时间到达时，系统会启动此 Activity，在屏幕上方显示一个对话框，
+ * 展示便签的部分内容（摘要），并播放系统默认的闹钟铃声。用户可以选择：
+ *     点击“确定”关闭提醒（停止铃声并退出）
+ *     点击“进入”跳转到便签编辑页面（仅在屏幕亮起时显示此按钮）
+ *
+ * 主要功能：
+ *     唤醒屏幕并保持亮屏（如果屏幕已关闭）
+ *     从 Intent 中解析便签 ID，并查询便签摘要
+ *     显示对话框并播放闹钟铃声（循环播放）
+ *     在对话框关闭时停止铃声并结束 Activity
+ *
+ */
 public class AlarmAlertActivity extends Activity implements OnClickListener, OnDismissListener {
-    private long mNoteId;
-    private String mSnippet;
-    private static final int SNIPPET_PREW_MAX_LEN = 60;
-    MediaPlayer mPlayer;
+    private long mNoteId;           // 触发提醒的便签 ID
+    private String mSnippet;        // 便签摘要（截断后显示）
+    private static final int SNIPPET_PREW_MAX_LEN = 60;   // 摘要显示最大长度
+    MediaPlayer mPlayer;            // 闹钟铃声播放器
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 隐藏标题栏
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
         final Window win = getWindow();
+        // 允许在锁屏状态下显示此 Activity
         win.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
 
+        // 如果屏幕当前是关闭的，则添加额外标志：点亮屏幕、保持亮屏等
         if (!isScreenOn()) {
             win.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
                     | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
@@ -63,9 +80,11 @@ public class AlarmAlertActivity extends Activity implements OnClickListener, OnD
 
         Intent intent = getIntent();
 
+        // 从 Intent 的 data URI 中解析便签 ID（格式：content://.../note/ID）
         try {
             mNoteId = Long.valueOf(intent.getData().getPathSegments().get(1));
             mSnippet = DataUtils.getSnippetById(this.getContentResolver(), mNoteId);
+            // 截断过长的摘要，超出部分添加“...”提示
             mSnippet = mSnippet.length() > SNIPPET_PREW_MAX_LEN ? mSnippet.substring(0,
                     SNIPPET_PREW_MAX_LEN) + getResources().getString(R.string.notelist_string_info)
                     : mSnippet;
@@ -75,6 +94,7 @@ public class AlarmAlertActivity extends Activity implements OnClickListener, OnD
         }
 
         mPlayer = new MediaPlayer();
+        // 检查便签是否存在且可见（未被删除或移入废纸篓）
         if (DataUtils.visibleInNoteDatabase(getContentResolver(), mNoteId, Notes.TYPE_NOTE)) {
             showActionDialog();
             playAlarmSound();
@@ -83,14 +103,24 @@ public class AlarmAlertActivity extends Activity implements OnClickListener, OnD
         }
     }
 
+    /**
+     * 检查屏幕是否处于点亮状态。
+     *
+     * @return true 屏幕亮起，false 屏幕关闭
+     */
     private boolean isScreenOn() {
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         return pm.isScreenOn();
     }
 
+    /**
+     * 播放系统默认的闹钟铃声（循环播放）。
+     * 根据系统设置决定音频流类型（闹钟流或受静音模式影响的流）。
+     */
     private void playAlarmSound() {
         Uri url = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM);
 
+        // 获取哪些音频流受静音模式影响
         int silentModeStreams = Settings.System.getInt(getContentResolver(),
                 Settings.System.MODE_RINGER_STREAMS_AFFECTED, 0);
 
@@ -102,34 +132,42 @@ public class AlarmAlertActivity extends Activity implements OnClickListener, OnD
         try {
             mPlayer.setDataSource(this, url);
             mPlayer.prepare();
-            mPlayer.setLooping(true);
+            mPlayer.setLooping(true);   // 循环播放，直到用户关闭
             mPlayer.start();
         } catch (IllegalArgumentException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         } catch (SecurityException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         } catch (IllegalStateException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }
 
+    /**
+     * 显示提醒对话框，展示便签摘要。
+     * 如果屏幕是亮起的，则显示“进入”按钮；否则只显示“确定”。
+     */
     private void showActionDialog() {
         AlertDialog.Builder dialog = new AlertDialog.Builder(this);
         dialog.setTitle(R.string.app_name);
         dialog.setMessage(mSnippet);
-        dialog.setPositiveButton(R.string.notealert_ok, this);
+        dialog.setPositiveButton(R.string.notealert_ok, this);          // 确定按钮：仅关闭提醒
         if (isScreenOn()) {
-            dialog.setNegativeButton(R.string.notealert_enter, this);
+            dialog.setNegativeButton(R.string.notealert_enter, this);   // 进入按钮：跳转编辑页
         }
         dialog.show().setOnDismissListener(this);
     }
 
+    /**
+     * 对话框按钮点击回调。
+     * - 点击“进入”时，启动 NoteEditActivity 打开对应的便签。
+     * - 点击“确定”时，无额外动作（对话框关闭后会停止铃声）。
+     *
+     * @param dialog 对话框
+     * @param which  点击的按钮（BUTTON_NEGATIVE 对应“进入”）
+     */
     public void onClick(DialogInterface dialog, int which) {
         switch (which) {
             case DialogInterface.BUTTON_NEGATIVE:
@@ -143,11 +181,18 @@ public class AlarmAlertActivity extends Activity implements OnClickListener, OnD
         }
     }
 
+    /**
+     * 对话框关闭时回调（无论点击哪个按钮或按返回键都会触发）。
+     * 停止闹钟铃声并结束 Activity。
+     */
     public void onDismiss(DialogInterface dialog) {
         stopAlarmSound();
         finish();
     }
 
+    /**
+     * 停止并释放 MediaPlayer 资源。
+     */
     private void stopAlarmSound() {
         if (mPlayer != null) {
             mPlayer.stop();

@@ -27,24 +27,46 @@ import android.database.Cursor;
 import net.micode.notes.data.Notes;
 import net.micode.notes.data.Notes.NoteColumns;
 
-
+/**
+ * 开机或系统时间变化后重新初始化闹钟提醒的广播接收器。
+ *
+ * <p>当设备重启或系统时间发生改变时，系统会发送 {@link android.intent.action.BOOT_COMPLETED}
+ * 或 {@link android.intent.action.TIME_SET} 等广播。该类接收此类广播后，
+ * 查询数据库中所有未过期的提醒（alert_date > 当前时间），并为每个提醒重新设置
+ * {@link AlarmManager}，确保闹钟在设备重启后仍然有效。
+ *
+ * 主要功能：
+ *     查询所有提醒时间大于当前时间的便签（TYPE_NOTE）
+ *     为每个便签创建一个指向 {@link AlarmReceiver} 的 PendingIntent
+ *     通过 AlarmManager 设置定时任务，在指定时间唤醒设备并触发广播
+ *
+ */
 public class AlarmInitReceiver extends BroadcastReceiver {
 
-    private static final String [] PROJECTION = new String [] {
-        NoteColumns.ID,
-        NoteColumns.ALERTED_DATE
+    // 查询提醒便签所需的投影列
+    private static final String[] PROJECTION = new String[]{
+            NoteColumns.ID,
+            NoteColumns.ALERTED_DATE
     };
 
-    private static final int COLUMN_ID                = 0;
-    private static final int COLUMN_ALERTED_DATE      = 1;
+    // 投影列索引
+    private static final int COLUMN_ID = 0;
+    private static final int COLUMN_ALERTED_DATE = 1;
 
+    /**
+     * 接收到广播时执行：查询所有未过期的提醒便签，并重新设置 AlarmManager。
+     *
+     * @param context 上下文
+     * @param intent  触发该接收器的 Intent（通常为 BOOT_COMPLETED 或 TIME_SET）
+     */
     @Override
     public void onReceive(Context context, Intent intent) {
         long currentDate = System.currentTimeMillis();
+        // 查询所有提醒时间大于当前时间且类型为便签的记录
         Cursor c = context.getContentResolver().query(Notes.CONTENT_NOTE_URI,
                 PROJECTION,
                 NoteColumns.ALERTED_DATE + ">? AND " + NoteColumns.TYPE + "=" + Notes.TYPE_NOTE,
-                new String[] { String.valueOf(currentDate) },
+                new String[]{String.valueOf(currentDate)},
                 null);
 
         if (c != null) {
@@ -53,10 +75,12 @@ public class AlarmInitReceiver extends BroadcastReceiver {
                     long alertDate = c.getLong(COLUMN_ALERTED_DATE);
                     Intent sender = new Intent(context, AlarmReceiver.class);
                     sender.setData(ContentUris.withAppendedId(Notes.CONTENT_NOTE_URI, c.getLong(COLUMN_ID)));
+                    // 使用 FLAG_UPDATE_CURRENT 确保 PendingIntent 更新（如果已存在则更新额外数据）
                     PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, sender, 0);
-                    AlarmManager alermManager = (AlarmManager) context
+                    AlarmManager alarmManager = (AlarmManager) context
                             .getSystemService(Context.ALARM_SERVICE);
-                    alermManager.set(AlarmManager.RTC_WAKEUP, alertDate, pendingIntent);
+                    // 设置精确闹钟，在提醒时间唤醒设备
+                    alarmManager.set(AlarmManager.RTC_WAKEUP, alertDate, pendingIntent);
                 } while (c.moveToNext());
             }
             c.close();
