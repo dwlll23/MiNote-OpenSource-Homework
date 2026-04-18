@@ -212,9 +212,12 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
         mAddNewNote.setOnClickListener(this);
         mAddNewNote.setOnTouchListener(new NewNoteOnTouchListener());
 
-        mBtnSearch = (ImageButton) findViewById(R.id.btn_search);
-        if (mBtnSearch != null) {
-            mBtnSearch.setOnClickListener(this);
+        // Hide the dedicated search button in the list header to keep only
+        // the search entry in the overflow menu (three-dot menu). This is a
+        // minimal change: do not modify layout files, just hide the view.
+        View btnSearch = findViewById(R.id.btn_search);
+        if (btnSearch != null) {
+            btnSearch.setVisibility(View.GONE);
         }
 
         mDispatch = false;
@@ -387,10 +390,12 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
         String selection = (mCurrentFolderId == Notes.ID_ROOT_FOLDER)
                 ? ROOT_FOLDER_SELECTION
                 : NORMAL_SELECTION;
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        String sortOrder = prefs.getString("sort_order", NoteColumns.TYPE + " DESC," + NoteColumns.MODIFIED_DATE + " DESC");
         mBackgroundQueryHandler.startQuery(FOLDER_NOTE_LIST_QUERY_TOKEN, null,
                 Notes.CONTENT_NOTE_URI, NoteItemData.PROJECTION, selection, new String[]{
                         String.valueOf(mCurrentFolderId)
-                }, NoteColumns.TYPE + " DESC," + NoteColumns.MODIFIED_DATE + " DESC");
+                }, sortOrder);
     }
 
     private final class BackgroundQueryHandler extends AsyncQueryHandler {
@@ -778,9 +783,20 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
 
     private void showSortDialog() {
         final String[] sorts = {"按创建时间升序", "按创建时间降序", "按修改时间升序", "按修改时间降序"};
+        final String[] orderByValues = {
+                NoteColumns.CREATED_DATE + " ASC",
+                NoteColumns.CREATED_DATE + " DESC",
+                NoteColumns.MODIFIED_DATE + " ASC",
+                NoteColumns.MODIFIED_DATE + " DESC"
+        };
         new AlertDialog.Builder(this)
                 .setTitle("选择排序方式")
-                .setItems(sorts, null)
+                .setItems(sorts, (dialog, which) -> {
+                    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+                    prefs.edit().putString("sort_order", orderByValues[which]).apply();
+                    Toast.makeText(this, "已经排好序了", Toast.LENGTH_SHORT).show();
+                    startAsyncNotesListQuery();
+                })
                 .show();
     }
 

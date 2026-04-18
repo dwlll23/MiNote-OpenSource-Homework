@@ -99,3 +99,8 @@ public class GTaskStringUtils {
     /** META_NOTE_NAME 的别名，供 MetaData 类使用（保持兼容） */
     public final static String META_NODE_NAME = META_NOTE_NAME;
 }
+    // Alias for metadata node name used by MetaData class. Kept as a separate
+    // symbol for compatibility with existing references (MetaData.setMeta).
+    public final static String META_NODE_NAME = META_NOTE_NAME;
+
+}

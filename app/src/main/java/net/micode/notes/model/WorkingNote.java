@@ -59,13 +59,11 @@ public class WorkingNote {
     // 模式：0 普通文本，1 Checklist 模式
     private int mMode;
 
-<<<<<<< Updated upstream
-=======
     // 字体颜色 ID
     private int mFontColorId;
 
     // 提醒时间（毫秒）
->>>>>>> Stashed changes
+
     private long mAlertDate;
 
     // 最后修改时间（毫秒）
@@ -119,13 +117,14 @@ public class WorkingNote {
     private static final int DATA_CONTENT_COLUMN = 1;
     private static final int DATA_MIME_TYPE_COLUMN = 2;
     private static final int DATA_MODE_COLUMN = 3;
-<<<<<<< Updated upstream
 
-=======
     private static final int DATA_FONT_COLOR_COLUMN = 4;
+  
+
+    private static final int NOTE_PARENT_ID_COLUMN = 0;
 
     // NOTE_PROJECTION 列索引
->>>>>>> Stashed changes
+
     private static final int NOTE_PARENT_ID_COLUMN = 0;
     private static final int NOTE_ALERTED_DATE_COLUMN = 1;
     private static final int NOTE_BG_COLOR_ID_COLUMN = 2;
@@ -148,6 +147,7 @@ public class WorkingNote {
         mNoteId = 0;
         mIsDeleted = false;
         mMode = 0;
+        mFontColorId = 0;
         mWidgetType = Notes.TYPE_WIDGET_INVALIDE;
     }
 
@@ -208,6 +208,7 @@ public class WorkingNote {
                     if (DataConstants.NOTE.equals(type)) {
                         mContent = cursor.getString(DATA_CONTENT_COLUMN);
                         mMode = cursor.getInt(DATA_MODE_COLUMN);
+                        mFontColorId = cursor.getInt(DATA_FONT_COLOR_COLUMN);
                         mNote.setTextDataId(cursor.getLong(DATA_ID_COLUMN));
                     } else if (DataConstants.CALL_NOTE.equals(type)) {
                         mNote.setCallDataId(cursor.getLong(DATA_ID_COLUMN));
@@ -360,8 +361,6 @@ public class WorkingNote {
         }
     }
 
-<<<<<<< Updated upstream
-=======
     /**
      * 设置字体颜色 ID。
      *
@@ -377,12 +376,13 @@ public class WorkingNote {
         }
     }
 
+
     /**
      * 设置 Checklist 模式（普通文本 ↔ 任务列表模式）。
      *
      * @param mode 模式：0 普通，1 Checklist
      */
->>>>>>> Stashed changes
+
     public void setCheckListMode(int mode) {
         if (mMode != mode) {
             if (mNoteSettingStatusListener != null) {
@@ -456,6 +456,10 @@ public class WorkingNote {
         return mBgColorId;
     }
 
+    public int getFontColorId() {
+        return mFontColorId;
+    }
+
     public int getTitleBgResId() {
         return NoteBgResources.getNoteTitleBgResource(mBgColorId);
     }
@@ -491,9 +495,13 @@ public class WorkingNote {
         void onBackgroundColorChanged();
 
         /**
-<<<<<<< Updated upstream
+         * Called when the font color of current note has just changed
+         */
+        void onFontColorChanged();
+
+        /**
          * Called when user set clock
-=======
+
          * 当字体颜色改变时调用。
          */
         void onFontColorChanged();
@@ -503,7 +511,7 @@ public class WorkingNote {
          *
          * @param date 提醒时间（毫秒）
          * @param set  true 设置提醒，false 取消提醒
->>>>>>> Stashed changes
+
          */
         void onClockAlertChanged(long date, boolean set);
 

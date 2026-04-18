@@ -57,7 +57,8 @@ public class MetaData extends Task {
             Log.e(TAG, "failed to put related gid");
         }
         setNotes(metaInfo.toString());      // 将 JSON 字符串存入 Task 的 notes 字段
-        setName(GTaskStringUtils.META_NODE_NAME);  // 节点名固定为元数据标识
+        // 使用 META_NOTE_NAME 以兼容不同版本的常量命名，保持与 GTaskStringUtils 中声明一致
+        setName(GTaskStringUtils.META_NOTE_NAME);  // 节点名固定为元数据标识
     }
 
     /**

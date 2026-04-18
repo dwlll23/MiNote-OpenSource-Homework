@@ -60,6 +60,7 @@ import net.micode.notes.data.Notes.TextNote;
 import net.micode.notes.model.WorkingNote;
 import net.micode.notes.model.WorkingNote.NoteSettingChangedListener;
 import net.micode.notes.tool.DataUtils;
+import android.database.Cursor;
 import net.micode.notes.tool.ResourceParser;
 import net.micode.notes.tool.ResourceParser.TextAppearanceResources;
 import net.micode.notes.ui.DateTimePickerDialog.OnDateTimeSetListener;
@@ -117,11 +118,30 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         sFontSelectorSelectionMap.put(ResourceParser.TEXT_SUPER, R.id.iv_super_select);
     }
 
+    private static final Map<Integer, Integer> sFontColorBtnsMap = new HashMap<Integer, Integer>();
+    static {
+        sFontColorBtnsMap.put(R.id.iv_font_black, 0);
+        sFontColorBtnsMap.put(R.id.iv_font_gray, 1);
+        sFontColorBtnsMap.put(R.id.iv_font_blue, 2);
+        sFontColorBtnsMap.put(R.id.iv_font_green, 3);
+        sFontColorBtnsMap.put(R.id.iv_font_red, 4);
+    }
+
+    private static final Map<Integer, Integer> sFontColorSelectionMap = new HashMap<Integer, Integer>();
+    static {
+        sFontColorSelectionMap.put(0, R.id.iv_font_black_select);
+        sFontColorSelectionMap.put(1, R.id.iv_font_gray_select);
+        sFontColorSelectionMap.put(2, R.id.iv_font_blue_select);
+        sFontColorSelectionMap.put(3, R.id.iv_font_green_select);
+        sFontColorSelectionMap.put(4, R.id.iv_font_red_select);
+    }
+
     private static final String TAG = "NoteEditActivity";
 
     private HeadViewHolder mNoteHeaderHolder;
     private View mHeadViewPanel;
     private View mNoteBgColorSelector;
+    private View mFontColorSelector;
     private View mFontSizeSelector;
     private EditText mNoteEditor;
     private View mNoteEditorPanel;
@@ -139,6 +159,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
 
     private String mUserQuery;
     private Pattern mPattern;
+    // Search result buffers when Activity started via ACTION_SEARCH
+    private long[] mSearchResultIds = null;
+    private String[] mSearchResultSnippets = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -247,11 +270,57 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         } else if (TextUtils.equals(Intent.ACTION_SEARCH, intent.getAction())) {
             String query = intent.getStringExtra(SearchManager.QUERY);
             mUserQuery = query;
-            if (mWorkingNote == null) {
+            // Try to find an existing note that contains the query and open it.
+            // Minimal safe implementation: query the text data for the first matching note.
+            if (!TextUtils.isEmpty(query)) {
+                Cursor c = null;
+                try {
+                    c = getContentResolver().query(Notes.CONTENT_DATA_URI,
+                            new String[] { net.micode.notes.data.Notes.DataColumns.NOTE_ID },
+                            net.micode.notes.data.Notes.DataColumns.MIME_TYPE + "=? AND "
+                                    + net.micode.notes.data.Notes.DataColumns.CONTENT + " LIKE ?",
+                            new String[] { Notes.TextNote.CONTENT_ITEM_TYPE, "%" + query + "%" },
+                            null);
+                    if (c != null) {
+                        java.util.ArrayList<Long> ids = new java.util.ArrayList<Long>();
+                        while (c.moveToNext()) {
+                            try {
+                                ids.add(c.getLong(0));
+                            } catch (IndexOutOfBoundsException e) {
+                                Log.w(TAG, "failed to read note id from cursor");
+                            }
+                        }
+                        if (!ids.isEmpty()) {
+                            mSearchResultIds = new long[ids.size()];
+                            mSearchResultSnippets = new String[ids.size()];
+                            for (int i = 0; i < ids.size(); i++) {
+                                long nid = ids.get(i);
+                                mSearchResultIds[i] = nid;
+                                try {
+                                    mSearchResultSnippets[i] = DataUtils.getSnippetById(getContentResolver(), nid);
+                                } catch (IllegalArgumentException ex) {
+                                    mSearchResultSnippets[i] = "";
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "query for search suggestions failed", e);
+                    mSearchResultIds = null;
+                    mSearchResultSnippets = null;
+                } finally {
+                    if (c != null) {
+                        c.close();
+                    }
+                }
+            }
+            if (mSearchResultIds == null || mSearchResultIds.length == 0) {
+                // no matches -> fall back to empty note
                 mWorkingNote = WorkingNote.createEmptyNote(this, Notes.ID_ROOT_FOLDER,
                         AppWidgetManager.INVALID_APPWIDGET_ID, Notes.TYPE_WIDGET_INVALIDE,
                         ResourceParser.getDefaultBgId(this));
             }
+            // If mSearchResultIds non-empty, we will show selection dialog in onResume
         } else {
             Log.e(TAG, "Intent not specified action, should not support");
             finish();
@@ -264,7 +333,67 @@ public class NoteEditActivity extends Activity implements OnClickListener,
     @Override
     protected void onResume() {
         super.onResume();
-        initNoteScreen();
+        if (mSearchResultIds != null) {
+            try {
+                showSearchResultsDialog();
+            } catch (Exception e) {
+                // If any unexpected error occurs when showing search results dialog,
+                // fallback to showing the note editor to avoid crash.
+                Log.e(TAG, "showSearchResultsDialog failed", e);
+                mSearchResultIds = null;
+                mSearchResultSnippets = null;
+                initNoteScreen();
+            }
+        } else {
+            initNoteScreen();
+        }
+    }
+
+    private void showSearchResultsDialog() {
+        if (mSearchResultIds == null || mSearchResultIds.length == 0) {
+            // no results, fallback
+            mWorkingNote = WorkingNote.createEmptyNote(this, Notes.ID_ROOT_FOLDER,
+                    AppWidgetManager.INVALID_APPWIDGET_ID, Notes.TYPE_WIDGET_INVALIDE,
+                    ResourceParser.getDefaultBgId(this));
+            initNoteScreen();
+            mSearchResultIds = null;
+            mSearchResultSnippets = null;
+            return;
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        final String[] items = mSearchResultSnippets;
+        // Use plural resource to generate a localized title like "5 results for "query""
+        int count = items == null ? 0 : items.length;
+        String title = getResources().getQuantityString(R.plurals.search_results_title, count,
+                String.valueOf(count), mUserQuery == null ? "" : mUserQuery);
+        builder.setTitle(title);
+        builder.setItems(items, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
+                long id = mSearchResultIds[which];
+                mWorkingNote = WorkingNote.load(NoteEditActivity.this, id);
+                if (mWorkingNote == null) {
+                    mWorkingNote = WorkingNote.createEmptyNote(NoteEditActivity.this, Notes.ID_ROOT_FOLDER,
+                            AppWidgetManager.INVALID_APPWIDGET_ID, Notes.TYPE_WIDGET_INVALIDE,
+                            ResourceParser.getDefaultBgId(NoteEditActivity.this));
+                }
+                mSearchResultIds = null;
+                mSearchResultSnippets = null;
+                initNoteScreen();
+            }
+        });
+        builder.setNegativeButton(android.R.string.cancel, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
+                mWorkingNote = WorkingNote.createEmptyNote(NoteEditActivity.this, Notes.ID_ROOT_FOLDER,
+                        AppWidgetManager.INVALID_APPWIDGET_ID, Notes.TYPE_WIDGET_INVALIDE,
+                        ResourceParser.getDefaultBgId(NoteEditActivity.this));
+                mSearchResultIds = null;
+                mSearchResultSnippets = null;
+                initNoteScreen();
+            }
+        });
+        builder.setCancelable(false);
+        builder.show();
     }
 
     private void initNoteScreen() {
@@ -279,6 +408,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         for (Integer id : sBgSelectorSelectionMap.keySet()) {
             findViewById(sBgSelectorSelectionMap.get(id)).setVisibility(View.GONE);
         }
+        for (Integer id : sFontColorSelectionMap.keySet()) {
+            findViewById(sFontColorSelectionMap.get(id)).setVisibility(View.GONE);
+        }
         mHeadViewPanel.setBackgroundResource(mWorkingNote.getTitleBgResId());
         mNoteEditorPanel.setBackgroundResource(mWorkingNote.getBgColorResId());
 
@@ -292,6 +424,8 @@ public class NoteEditActivity extends Activity implements OnClickListener,
          * is not ready
          */
         showAlertHeader();
+        // Apply font color when initializing the screen
+        onFontColorChanged();
     }
 
     private void showAlertHeader() {
@@ -340,6 +474,12 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             return true;
         }
 
+        if (mFontColorSelector != null && mFontColorSelector.getVisibility() == View.VISIBLE
+                && !inRangeOfView(mFontColorSelector, ev)) {
+            mFontColorSelector.setVisibility(View.GONE);
+            return true;
+        }
+
         if (mFontSizeSelector.getVisibility() == View.VISIBLE
                 && !inRangeOfView(mFontSizeSelector, ev)) {
             mFontSizeSelector.setVisibility(View.GONE);
@@ -378,6 +518,12 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             iv.setOnClickListener(this);
         }
 
+        mFontColorSelector = findViewById(R.id.font_color_selector);
+        for (int id : sFontColorBtnsMap.keySet()) {
+            ImageView iv = (ImageView) findViewById(id);
+            iv.setOnClickListener(this);
+        }
+
         mFontSizeSelector = findViewById(R.id.font_size_selector);
         for (int id : sFontSizeBtnsMap.keySet()) {
             View view = findViewById(id);
@@ -397,6 +543,8 @@ public class NoteEditActivity extends Activity implements OnClickListener,
 
         findViewById(R.id.btn_checklist).setOnClickListener(this);
         findViewById(R.id.btn_reminder).setOnClickListener(this);
+        // font color button
+        findViewById(R.id.btn_set_font_color).setOnClickListener(this);
     }
 
     @Override
@@ -433,11 +581,20 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             mNoteBgColorSelector.setVisibility(View.VISIBLE);
             findViewById(sBgSelectorSelectionMap.get(mWorkingNote.getBgColorId()))
                     .setVisibility(View.VISIBLE);
+        } else if (id == R.id.btn_set_font_color) {
+            mFontColorSelector.setVisibility(View.VISIBLE);
+            findViewById(sFontColorSelectionMap.get(mWorkingNote.getFontColorId()))
+                    .setVisibility(View.VISIBLE);
         } else if (sBgSelectorBtnsMap.containsKey(id)) {
             findViewById(sBgSelectorSelectionMap.get(mWorkingNote.getBgColorId()))
                     .setVisibility(View.GONE);
             mWorkingNote.setBgColorId(sBgSelectorBtnsMap.get(id));
             mNoteBgColorSelector.setVisibility(View.GONE);
+        } else if (sFontColorBtnsMap.containsKey(id)) {
+            findViewById(sFontColorSelectionMap.get(mWorkingNote.getFontColorId()))
+                    .setVisibility(View.GONE);
+            mWorkingNote.setFontColorId(sFontColorBtnsMap.get(id));
+            mFontColorSelector.setVisibility(View.GONE);
         } else if (sFontSizeBtnsMap.containsKey(id)) {
             findViewById(sFontSelectorSelectionMap.get(mFontSizeId)).setVisibility(View.GONE);
             mFontSizeId = sFontSizeBtnsMap.get(id);
@@ -473,6 +630,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         if (mNoteBgColorSelector.getVisibility() == View.VISIBLE) {
             mNoteBgColorSelector.setVisibility(View.GONE);
             return true;
+        } else if (mFontColorSelector != null && mFontColorSelector.getVisibility() == View.VISIBLE) {
+            mFontColorSelector.setVisibility(View.GONE);
+            return true;
         } else if (mFontSizeSelector.getVisibility() == View.VISIBLE) {
             mFontSizeSelector.setVisibility(View.GONE);
             return true;
@@ -485,6 +645,50 @@ public class NoteEditActivity extends Activity implements OnClickListener,
                 .setVisibility(View.VISIBLE);
         mNoteEditorPanel.setBackgroundResource(mWorkingNote.getBgColorResId());
         mHeadViewPanel.setBackgroundResource(mWorkingNote.getTitleBgResId());
+    }
+
+    public void onFontColorChanged() {
+        // Update font color selection indicator and apply text color to editor
+        // and checklist items. Color ids map to resources defined in res/values/colors.xml
+        findViewById(sFontColorSelectionMap.get(mWorkingNote.getFontColorId()))
+                .setVisibility(View.VISIBLE);
+
+        int colorRes;
+        switch (mWorkingNote.getFontColorId()) {
+            case 1:
+                colorRes = R.color.font_color_gray;
+                break;
+            case 2:
+                colorRes = R.color.font_color_blue;
+                break;
+            case 3:
+                colorRes = R.color.font_color_green;
+                break;
+            case 4:
+                colorRes = R.color.font_color_red;
+                break;
+            case 0:
+            default:
+                colorRes = R.color.font_color_black;
+                break;
+        }
+
+        int color = this.getResources().getColor(colorRes);
+        if (mWorkingNote.getCheckListMode() == TextNote.MODE_CHECK_LIST) {
+            for (int i = 0; i < mEditTextList.getChildCount(); i++) {
+                NoteEditText edit = (NoteEditText) mEditTextList.getChildAt(i)
+                        .findViewById(R.id.et_edit_text);
+                if (edit != null) {
+                    edit.setTextColor(color);
+                    edit.setTextAppearance(this,
+                            TextAppearanceResources.getTexAppearanceResource(mFontSizeId));
+                }
+            }
+        } else {
+            mNoteEditor.setTextColor(color);
+            mNoteEditor.setTextAppearance(this,
+                    TextAppearanceResources.getTexAppearanceResource(mFontSizeId));
+        }
     }
 
     @Override
@@ -716,10 +920,28 @@ public class NoteEditActivity extends Activity implements OnClickListener,
     }
 
     private Spannable getHighlightQueryResult(String fullText, String userQuery) {
-        SpannableString spannable = new SpannableString(fullText == null ? "" : fullText);
+        // Ensure we never pass null to matcher to avoid NPEs when fullText is null
+        String safeText = fullText == null ? "" : fullText;
+        SpannableString spannable = new SpannableString(safeText);
         if (!TextUtils.isEmpty(userQuery)) {
-            mPattern = Pattern.compile(userQuery);
-            Matcher m = mPattern.matcher(fullText);
+            // Build a fuzzy regex so user's query is treated as an in-order fuzzy match
+            // e.g. "abc" -> "a.*b.*c". Use case-insensitive matching and fall back
+            // to literal match on syntax error.
+            try {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < userQuery.length(); i++) {
+                    // quote each character to avoid regex metacharacters altering behavior
+                    sb.append(Pattern.quote(String.valueOf(userQuery.charAt(i))));
+                    if (i != userQuery.length() - 1) {
+                        sb.append(".*");
+                    }
+                }
+                mPattern = Pattern.compile(sb.toString(), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+            } catch (Exception e) {
+                // fallback: treat as literal to avoid crashing on bad patterns
+                mPattern = Pattern.compile(Pattern.quote(userQuery), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+            }
+            Matcher m = mPattern.matcher(safeText);
             int start = 0;
             while (m.find(start)) {
                 spannable.setSpan(
