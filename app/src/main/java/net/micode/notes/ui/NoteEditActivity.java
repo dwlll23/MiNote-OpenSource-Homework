@@ -60,6 +60,7 @@ import net.micode.notes.data.Notes.TextNote;
 import net.micode.notes.model.WorkingNote;
 import net.micode.notes.model.WorkingNote.NoteSettingChangedListener;
 import net.micode.notes.tool.DataUtils;
+import android.database.Cursor;
 import net.micode.notes.tool.ResourceParser;
 import net.micode.notes.tool.ResourceParser.TextAppearanceResources;
 import net.micode.notes.ui.DateTimePickerDialog.OnDateTimeSetListener;
@@ -138,8 +139,6 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         sFontSelectorSelectionMap.put(ResourceParser.TEXT_SUPER, R.id.iv_super_select);
     }
 
-<<<<<<< Updated upstream
-=======
     // 字体颜色选择按钮映射（控件 ID -> 颜色 ID）
     private static final Map<Integer, Integer> sFontColorBtnsMap = new HashMap<Integer, Integer>();
     static {
@@ -160,20 +159,10 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         sFontColorSelectionMap.put(4, R.id.iv_font_red_select);
     }
 
->>>>>>> Stashed changes
     private static final String TAG = "NoteEditActivity";
 
     private HeadViewHolder mNoteHeaderHolder;
     private View mHeadViewPanel;
-<<<<<<< Updated upstream
-    private View mNoteBgColorSelector;
-    private View mFontSizeSelector;
-    private EditText mNoteEditor;
-    private View mNoteEditorPanel;
-    private WorkingNote mWorkingNote;
-    private SharedPreferences mSharedPrefs;
-    private int mFontSizeId;
-=======
     private View mNoteBgColorSelector;      // 背景颜色选择器面板
     private View mFontColorSelector;        // 字体颜色选择器面板
     private View mFontSizeSelector;         // 字体大小选择器面板
@@ -182,7 +171,6 @@ public class NoteEditActivity extends Activity implements OnClickListener,
     private WorkingNote mWorkingNote;       // 当前便签的数据模型
     private SharedPreferences mSharedPrefs; // 偏好设置（存储字体大小等）
     private int mFontSizeId;                // 当前字体大小 ID
->>>>>>> Stashed changes
 
     private static final String PREFERENCE_FONT_SIZE = "pref_font_size";
     private static final int SHORTCUT_ICON_TITLE_MAX_LEN = 10;
@@ -192,15 +180,10 @@ public class NoteEditActivity extends Activity implements OnClickListener,
 
     private LinearLayout mEditTextList;     // checklist 模式下的编辑框列表容器
 
-<<<<<<< Updated upstream
-    private String mUserQuery;
-    private Pattern mPattern;
-=======
     private String mUserQuery;              // 从搜索跳转时传入的查询词（用于高亮）
     private Pattern mPattern;               // 用于高亮匹配的正则模式
     private long[] mSearchResultIds;        // 搜索结果便签 ID 列表
     private String[] mSearchResultSnippets; // 搜索结果便签摘要列表
->>>>>>> Stashed changes
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -311,9 +294,6 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             // 处理系统搜索框的 Intent：查询匹配的便签，弹出选择对话框
             String query = intent.getStringExtra(SearchManager.QUERY);
             mUserQuery = query;
-<<<<<<< Updated upstream
-            if (mWorkingNote == null) {
-=======
             if (!TextUtils.isEmpty(query)) {
                 Cursor c = null;
                 try {
@@ -359,15 +339,11 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             }
             if (mSearchResultIds == null || mSearchResultIds.length == 0) {
                 // 无匹配结果，创建一个空便签
->>>>>>> Stashed changes
                 mWorkingNote = WorkingNote.createEmptyNote(this, Notes.ID_ROOT_FOLDER,
                         AppWidgetManager.INVALID_APPWIDGET_ID, Notes.TYPE_WIDGET_INVALIDE,
                         ResourceParser.getDefaultBgId(this));
             }
-<<<<<<< Updated upstream
-=======
             // 如果有多个匹配结果，将在 onResume 中显示选择对话框
->>>>>>> Stashed changes
         } else {
             Log.e(TAG, "Intent not specified action, should not support");
             finish();
@@ -380,9 +356,6 @@ public class NoteEditActivity extends Activity implements OnClickListener,
     @Override
     protected void onResume() {
         super.onResume();
-<<<<<<< Updated upstream
-        initNoteScreen();
-=======
         if (mSearchResultIds != null) {
             try {
                 showSearchResultsDialog();
@@ -443,7 +416,6 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         });
         builder.setCancelable(false);
         builder.show();
->>>>>>> Stashed changes
     }
 
     /**
@@ -462,6 +434,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         for (Integer id : sBgSelectorSelectionMap.keySet()) {
             findViewById(sBgSelectorSelectionMap.get(id)).setVisibility(View.GONE);
         }
+        for (Integer id : sFontColorSelectionMap.keySet()) {
+            findViewById(sFontColorSelectionMap.get(id)).setVisibility(View.GONE);
+        }
         mHeadViewPanel.setBackgroundResource(mWorkingNote.getTitleBgResId());
         mNoteEditorPanel.setBackgroundResource(mWorkingNote.getBgColorResId());
 
@@ -471,10 +446,7 @@ public class NoteEditActivity extends Activity implements OnClickListener,
                         | DateUtils.FORMAT_SHOW_YEAR));
 
         showAlertHeader();
-<<<<<<< Updated upstream
-=======
         onFontColorChanged();
->>>>>>> Stashed changes
     }
 
     /**
@@ -528,6 +500,12 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             return true;
         }
 
+        if (mFontColorSelector != null && mFontColorSelector.getVisibility() == View.VISIBLE
+                && !inRangeOfView(mFontColorSelector, ev)) {
+            mFontColorSelector.setVisibility(View.GONE);
+            return true;
+        }
+
         if (mFontSizeSelector.getVisibility() == View.VISIBLE
                 && !inRangeOfView(mFontSizeSelector, ev)) {
             mFontSizeSelector.setVisibility(View.GONE);
@@ -569,6 +547,12 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             iv.setOnClickListener(this);
         }
 
+        mFontColorSelector = findViewById(R.id.font_color_selector);
+        for (int id : sFontColorBtnsMap.keySet()) {
+            ImageView iv = (ImageView) findViewById(id);
+            iv.setOnClickListener(this);
+        }
+
         mFontSizeSelector = findViewById(R.id.font_size_selector);
         for (int id : sFontSizeBtnsMap.keySet()) {
             View view = findViewById(id);
@@ -584,10 +568,7 @@ public class NoteEditActivity extends Activity implements OnClickListener,
 
         findViewById(R.id.btn_checklist).setOnClickListener(this);
         findViewById(R.id.btn_reminder).setOnClickListener(this);
-<<<<<<< Updated upstream
-=======
         findViewById(R.id.btn_set_font_color).setOnClickListener(this);
->>>>>>> Stashed changes
     }
 
     @Override
@@ -630,11 +611,20 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             mNoteBgColorSelector.setVisibility(View.VISIBLE);
             findViewById(sBgSelectorSelectionMap.get(mWorkingNote.getBgColorId()))
                     .setVisibility(View.VISIBLE);
+        } else if (id == R.id.btn_set_font_color) {
+            mFontColorSelector.setVisibility(View.VISIBLE);
+            findViewById(sFontColorSelectionMap.get(mWorkingNote.getFontColorId()))
+                    .setVisibility(View.VISIBLE);
         } else if (sBgSelectorBtnsMap.containsKey(id)) {
             findViewById(sBgSelectorSelectionMap.get(mWorkingNote.getBgColorId()))
                     .setVisibility(View.GONE);
             mWorkingNote.setBgColorId(sBgSelectorBtnsMap.get(id));
             mNoteBgColorSelector.setVisibility(View.GONE);
+        } else if (sFontColorBtnsMap.containsKey(id)) {
+            findViewById(sFontColorSelectionMap.get(mWorkingNote.getFontColorId()))
+                    .setVisibility(View.GONE);
+            mWorkingNote.setFontColorId(sFontColorBtnsMap.get(id));
+            mFontColorSelector.setVisibility(View.GONE);
         } else if (sFontSizeBtnsMap.containsKey(id)) {
             findViewById(sFontSelectorSelectionMap.get(mFontSizeId)).setVisibility(View.GONE);
             mFontSizeId = sFontSizeBtnsMap.get(id);
@@ -674,6 +664,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         if (mNoteBgColorSelector.getVisibility() == View.VISIBLE) {
             mNoteBgColorSelector.setVisibility(View.GONE);
             return true;
+        } else if (mFontColorSelector != null && mFontColorSelector.getVisibility() == View.VISIBLE) {
+            mFontColorSelector.setVisibility(View.GONE);
+            return true;
         } else if (mFontSizeSelector.getVisibility() == View.VISIBLE) {
             mFontSizeSelector.setVisibility(View.GONE);
             return true;
@@ -691,8 +684,6 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         mHeadViewPanel.setBackgroundResource(mWorkingNote.getTitleBgResId());
     }
 
-<<<<<<< Updated upstream
-=======
     /**
      * 实现 NoteSettingChangedListener：字体颜色改变时更新编辑器文字颜色及 checklist 项颜色。
      */
@@ -738,7 +729,6 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         }
     }
 
->>>>>>> Stashed changes
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
         if (isFinishing()) {
@@ -975,12 +965,6 @@ public class NoteEditActivity extends Activity implements OnClickListener,
      * @return 带高亮样式的 Spannable 对象
      */
     private Spannable getHighlightQueryResult(String fullText, String userQuery) {
-<<<<<<< Updated upstream
-        SpannableString spannable = new SpannableString(fullText == null ? "" : fullText);
-        if (!TextUtils.isEmpty(userQuery)) {
-            mPattern = Pattern.compile(userQuery);
-            Matcher m = mPattern.matcher(fullText);
-=======
         String safeText = fullText == null ? "" : fullText;
         SpannableString spannable = new SpannableString(safeText);
         if (!TextUtils.isEmpty(userQuery)) {
@@ -997,7 +981,6 @@ public class NoteEditActivity extends Activity implements OnClickListener,
                 mPattern = Pattern.compile(Pattern.quote(userQuery), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
             }
             Matcher m = mPattern.matcher(safeText);
->>>>>>> Stashed changes
             int start = 0;
             while (m.find(start)) {
                 spannable.setSpan(

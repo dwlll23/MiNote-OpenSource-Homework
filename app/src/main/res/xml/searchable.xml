@@ -20,6 +20,7 @@
     android:label="@string/search_label"
     android:hint="@string/search_hint"
     android:searchMode="queryRewriteFromText"
+    android:imeOptions="actionSearch"
 
     android:searchSuggestAuthority="notes"
     android:searchSuggestIntentAction="android.intent.action.VIEW"
