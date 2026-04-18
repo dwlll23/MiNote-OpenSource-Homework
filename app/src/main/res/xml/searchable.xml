@@ -22,7 +22,7 @@
     android:searchMode="queryRewriteFromText"
     android:imeOptions="actionSearch"
 
-    android:searchSuggestAuthority="notes"
+    android:searchSuggestAuthority="micode_notes"
     android:searchSuggestIntentAction="android.intent.action.VIEW"
     android:searchSettingsDescription="@string/search_setting_description"
     android:includeInGlobalSearch="true" />
