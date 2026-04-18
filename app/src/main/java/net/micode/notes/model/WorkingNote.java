@@ -119,9 +119,6 @@ public class WorkingNote {
     private static final int DATA_MODE_COLUMN = 3;
 
     private static final int DATA_FONT_COLOR_COLUMN = 4;
-  
-
-    private static final int NOTE_PARENT_ID_COLUMN = 0;
 
     // NOTE_PROJECTION 列索引
 
@@ -500,11 +497,11 @@ public class WorkingNote {
         void onFontColorChanged();
 
         /**
-         * Called when user set clock
-
-         * 当字体颜色改变时调用。
+         * 当提醒时间被设置或取消时调用。
+         *
+         * @param date 提醒时间（毫秒）
+         * @param set  true 设置提醒，false 取消提醒
          */
-        void onFontColorChanged();
 
         /**
          * 当提醒时间被设置或取消时调用。
