@@ -30,14 +30,27 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 
-
+/**
+ * 便签列表的 CursorAdapter，负责将数据库中的便签和文件夹数据显示为列表项。
+ *
+ * 主要功能：
+ *     使用 {@link NotesListItem} 作为列表项视图
+ *     支持多选模式（通过 {@link #setChoiceMode} 控制）
+ *     记录被选中的项（通过 {@link #setCheckedItem}）
+ *     提供获取选中项 ID 集合、关联的小部件信息等方法
+ *     自动计算列表中便签的数量（不含文件夹）
+ *
+ */
 public class NotesListAdapter extends CursorAdapter {
     private static final String TAG = "NotesListAdapter";
     private Context mContext;
-    private HashMap<Integer, Boolean> mSelectedIndex;
-    private int mNotesCount;
-    private boolean mChoiceMode;
+    private HashMap<Integer, Boolean> mSelectedIndex; // 记录每个位置是否被选中
+    private int mNotesCount;                          // 列表中便签的数量（不含文件夹）
+    private boolean mChoiceMode;                      // 是否处于多选模式
 
+    /**
+     * 桌面小部件属性，用于记录便签关联的小部件 ID 和类型。
+     */
     public static class AppWidgetAttribute {
         public int widgetId;
         public int widgetType;
@@ -50,11 +63,27 @@ public class NotesListAdapter extends CursorAdapter {
         mNotesCount = 0;
     }
 
+    /**
+     * 创建新的列表项视图。
+     *
+     * @param context 上下文
+     * @param cursor  游标（未使用）
+     * @param parent  父视图
+     * @return 新建的 NotesListItem 实例
+     */
     @Override
     public View newView(Context context, Cursor cursor, ViewGroup parent) {
         return new NotesListItem(context);
     }
 
+    /**
+     * 将游标中的数据绑定到已有视图上。
+     * 创建 {@link NoteItemData} 对象，并调用 {@link NotesListItem#bind} 设置视图。
+     *
+     * @param view    要绑定的视图（必须是 NotesListItem 类型）
+     * @param context 上下文
+     * @param cursor  指向当前行的游标
+     */
     @Override
     public void bindView(View view, Context context, Cursor cursor) {
         if (view instanceof NotesListItem) {
@@ -64,6 +93,12 @@ public class NotesListAdapter extends CursorAdapter {
         }
     }
 
+    /**
+     * 设置指定位置项的选中状态。
+     *
+     * @param position 列表位置
+     * @param checked  是否选中
+     */
     public void setCheckedItem(final int position, final boolean checked) {
         mSelectedIndex.put(position, checked);
         notifyDataSetChanged();
@@ -73,11 +108,21 @@ public class NotesListAdapter extends CursorAdapter {
         return mChoiceMode;
     }
 
+    /**
+     * 设置多选模式。切换模式时会清空所有选中记录。
+     *
+     * @param mode true 开启多选模式，false 关闭
+     */
     public void setChoiceMode(boolean mode) {
         mSelectedIndex.clear();
         mChoiceMode = mode;
     }
 
+    /**
+     * 全选或取消全选（仅对便签类型有效，文件夹不会被选中）。
+     *
+     * @param checked true 全选，false 取消全选
+     */
     public void selectAll(boolean checked) {
         Cursor cursor = getCursor();
         for (int i = 0; i < getCount(); i++) {
@@ -89,6 +134,11 @@ public class NotesListAdapter extends CursorAdapter {
         }
     }
 
+    /**
+     * 获取所有选中项的 ID 集合。
+     *
+     * @return HashSet 包含选中的便签 ID（不含根文件夹）
+     */
     public HashSet<Long> getSelectedItemIds() {
         HashSet<Long> itemSet = new HashSet<Long>();
         for (Integer position : mSelectedIndex.keySet()) {
@@ -101,10 +151,14 @@ public class NotesListAdapter extends CursorAdapter {
                 }
             }
         }
-
         return itemSet;
     }
 
+    /**
+     * 获取所有选中便签关联的小部件属性集合。
+     *
+     * @return HashSet 包含小部件属性，若游标无效则返回 null
+     */
     public HashSet<AppWidgetAttribute> getSelectedWidget() {
         HashSet<AppWidgetAttribute> itemSet = new HashSet<AppWidgetAttribute>();
         for (Integer position : mSelectedIndex.keySet()) {
@@ -116,9 +170,7 @@ public class NotesListAdapter extends CursorAdapter {
                     widget.widgetId = item.getWidgetId();
                     widget.widgetType = item.getWidgetType();
                     itemSet.add(widget);
-                    /**
-                     * Don't close cursor here, only the adapter could close it
-                     */
+                    // 注意：不能在此关闭游标，游标由 CursorAdapter 统一管理
                 } else {
                     Log.e(TAG, "Invalid cursor");
                     return null;
@@ -128,6 +180,11 @@ public class NotesListAdapter extends CursorAdapter {
         return itemSet;
     }
 
+    /**
+     * 获取选中项的数量。
+     *
+     * @return 选中项个数
+     */
     public int getSelectedCount() {
         Collection<Boolean> values = mSelectedIndex.values();
         if (null == values) {
@@ -143,11 +200,22 @@ public class NotesListAdapter extends CursorAdapter {
         return count;
     }
 
+    /**
+     * 判断是否全选（所有便签都被选中，文件夹不计入）。
+     *
+     * @return true 全选，false 未全选
+     */
     public boolean isAllSelected() {
         int checkedCount = getSelectedCount();
         return (checkedCount != 0 && checkedCount == mNotesCount);
     }
 
+    /**
+     * 判断指定位置是否被选中。
+     *
+     * @param position 列表位置
+     * @return true 选中，false 未选中或记录不存在
+     */
     public boolean isSelectedItem(final int position) {
         if (null == mSelectedIndex.get(position)) {
             return false;
@@ -155,18 +223,29 @@ public class NotesListAdapter extends CursorAdapter {
         return mSelectedIndex.get(position);
     }
 
+    /**
+     * 当 Cursor 内容发生变化时，重新计算便签数量。
+     */
     @Override
     protected void onContentChanged() {
         super.onContentChanged();
         calcNotesCount();
     }
 
+    /**
+     * 更换 Cursor 时，重新计算便签数量。
+     *
+     * @param cursor 新游标
+     */
     @Override
     public void changeCursor(Cursor cursor) {
         super.changeCursor(cursor);
         calcNotesCount();
     }
 
+    /**
+     * 计算列表中便签（TYPE_NOTE）的数量，用于全选判断。
+     */
     private void calcNotesCount() {
         mNotesCount = 0;
         for (int i = 0; i < getCount(); i++) {
